@@ -744,6 +744,12 @@ namespace RFiDGear.Infrastructure.ReaderProviders
                     DesfireChip = new MifareDesfireChipModel();
                 }
 
+                // Reset the app list before repopulating it below. DesfireChip is only replaced
+                // when null (line above), so without this, every additional call (e.g. re-running
+                // the quick check on the same card) would append to whatever was already there,
+                // duplicating every previously discovered AppID.
+                DesfireChip.AppList = new List<MifareDesfireAppModel>();
+
                 // The excepted memory tree
                 DESFireLocation location = new DESFireLocation
                 {
