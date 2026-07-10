@@ -2285,50 +2285,99 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
 
                     if (CustomConverter.FormatMifareDesfireKeyStringWithSpacesEachByte(DesfireReadKeyCurrent) == KEY_ERROR.NO_ERROR)
                     {
+                        if (IsValidAppNumberNew == false)
+                        {
+                            StatusText += string.Format("{0}: Invalid App ID.\n", DateTime.Now);
+                            CurrentTaskErrorLevel = ERROR.ProtocolConstraint;
+                            await UpdateReaderStatusCommand.ExecuteAsync(false);
+                            return;
+                        }
+
+                        DESFireKeySettings keySettings = (DESFireKeySettings)SelectedDesfireAppKeySettingsCreateNewApp;
+
+                        keySettings |= IsAllowChangeMKChecked ? (DESFireKeySettings)1 : (DESFireKeySettings)0;
+                        keySettings |= IsAllowListingWithoutMKChecked ? (DESFireKeySettings)2 : (DESFireKeySettings)0;
+                        keySettings |= IsAllowCreateDelWithoutMKChecked ? (DESFireKeySettings)4 : (DESFireKeySettings)0;
+                        keySettings |= IsAllowConfigChangableChecked ? (DESFireKeySettings)8 : (DESFireKeySettings)0;
+
+                        // Attempt 1: try creating the application without authenticating to the PICC
+                        // master key first. Some cards' PICC configuration permits free application
+                        // creation (DESFireKeySettings.AllowFreeCreateDeleteWithoutMasterKey); this
+                        // avoids an unnecessary (and, on some cards, rate-limited) authentication
+                        // attempt whenever it's not actually required.
+                        StatusText += string.Format("{0}: Trying to create AppID {1} without PICC authentication...\n", DateTime.Now, AppNumberNewAsInt);
+
+                        var createResult = await device.CreateMifareDesfireApplication(
+                            DesfireMasterKeyCurrent,
+                            keySettings,
+                            SelectedDesfireMasterKeyEncryptionTypeCurrent,
+                            SelectedDesfireAppKeyEncryptionTypeCreateNewApp,
+                            selectedDesfireAppMaxNumberOfKeysAsInt,
+                            AppNumberNewAsInt,
+                            authenticateToPICCFirst: false);
+
+                        if (createResult.Code == ERROR.NoError)
+                        {
+                            StatusText += string.Format("{0}: Successfully Created AppID {1}\n", DateTime.Now, AppNumberNewAsInt);
+                            CurrentTaskErrorLevel = createResult.Code;
+                            await UpdateReaderStatusCommand.ExecuteAsync(false);
+                            return;
+                        }
+
+                        bool cardRequiresPiccAuth = createResult.Code == ERROR.AuthFailure || createResult.Code == ERROR.PermissionDenied;
+
+                        if (!cardRequiresPiccAuth)
+                        {
+                            // Anything other than an auth/permission rejection (transport error,
+                            // application already exists, etc.) is not something a PICC
+                            // authentication retry would fix, so surface it as-is instead of
+                            // touching the card again.
+                            StatusText += string.Format("{0}: Unable to Create App: {1}\n", DateTime.Now, createResult.Message ?? createResult.Code.ToString());
+                            CurrentTaskErrorLevel = createResult.Code;
+                            await UpdateReaderStatusCommand.ExecuteAsync(false);
+                            return;
+                        }
+
+                        // Attempt 2 (single retry): the card rejected free creation, so this PICC
+                        // requires master-key authentication. Authenticate once, then retry the
+                        // create exactly once more with the auth already established.
+                        StatusText += string.Format("{0}: Free creation was denied; authenticating to PICC master key...\n", DateTime.Now);
+
                         var authResult = await device.AuthToMifareDesfireApplication(
                                   DesfireMasterKeyCurrent,
                                   SelectedDesfireMasterKeyEncryptionTypeCurrent,
                                   0);
 
-                        if (IsValidAppNumberNew != false && authResult == ERROR.NoError)
-                        {
-                            StatusText += string.Format("{0}: Successfully Authenticated to App 0\n", DateTime.Now);
-
-                            DESFireKeySettings keySettings;
-                            keySettings = (DESFireKeySettings)SelectedDesfireAppKeySettingsCreateNewApp;
-
-                            keySettings |= IsAllowChangeMKChecked ? (DESFireKeySettings)1 : (DESFireKeySettings)0;
-                            keySettings |= IsAllowListingWithoutMKChecked ? (DESFireKeySettings)2 : (DESFireKeySettings)0;
-                            keySettings |= IsAllowCreateDelWithoutMKChecked ? (DESFireKeySettings)4 : (DESFireKeySettings)0;
-                            keySettings |= IsAllowConfigChangableChecked ? (DESFireKeySettings)8 : (DESFireKeySettings)0;
-
-                            var createResult = await device.CreateMifareDesfireApplication(
-                                DesfireMasterKeyCurrent,
-                                keySettings,
-                                SelectedDesfireMasterKeyEncryptionTypeCurrent,
-                                SelectedDesfireAppKeyEncryptionTypeCreateNewApp,
-                                selectedDesfireAppMaxNumberOfKeysAsInt,
-                                AppNumberNewAsInt);
-
-                            if (createResult.Code == ERROR.NoError)
-                            {
-                                StatusText += string.Format("{0}: Successfully Created AppID {1}\n", DateTime.Now, AppNumberNewAsInt);
-                                CurrentTaskErrorLevel = createResult.Code;
-                                await UpdateReaderStatusCommand.ExecuteAsync(false);
-                                return;
-                            }
-                            else
-                            {
-                                StatusText += string.Format("{0}: Unable to Create App: {1}\n", DateTime.Now, createResult.Message ?? createResult.Code.ToString());
-                                CurrentTaskErrorLevel = createResult.Code;
-                                await UpdateReaderStatusCommand.ExecuteAsync(false);
-                                return;
-                            }
-                        }
-                        else
+                        if (authResult != ERROR.NoError)
                         {
                             StatusText += string.Format("{0}: Authentication to PICC failed.\n", DateTime.Now);
                             CurrentTaskErrorLevel = authResult;
+                            await UpdateReaderStatusCommand.ExecuteAsync(false);
+                            return;
+                        }
+
+                        StatusText += string.Format("{0}: Successfully Authenticated to App 0\n", DateTime.Now);
+
+                        createResult = await device.CreateMifareDesfireApplication(
+                            DesfireMasterKeyCurrent,
+                            keySettings,
+                            SelectedDesfireMasterKeyEncryptionTypeCurrent,
+                            SelectedDesfireAppKeyEncryptionTypeCreateNewApp,
+                            selectedDesfireAppMaxNumberOfKeysAsInt,
+                            AppNumberNewAsInt,
+                            authenticateToPICCFirst: false); // already authenticated above; never repeat it here
+
+                        if (createResult.Code == ERROR.NoError)
+                        {
+                            StatusText += string.Format("{0}: Successfully Created AppID {1}\n", DateTime.Now, AppNumberNewAsInt);
+                            CurrentTaskErrorLevel = createResult.Code;
+                            await UpdateReaderStatusCommand.ExecuteAsync(false);
+                            return;
+                        }
+                        else
+                        {
+                            StatusText += string.Format("{0}: Unable to Create App: {1}\n", DateTime.Now, createResult.Message ?? createResult.Code.ToString());
+                            CurrentTaskErrorLevel = createResult.Code;
                             await UpdateReaderStatusCommand.ExecuteAsync(false);
                             return;
                         }
