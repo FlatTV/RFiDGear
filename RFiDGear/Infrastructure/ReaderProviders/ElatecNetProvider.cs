@@ -961,7 +961,7 @@ namespace RFiDGear.Infrastructure.ReaderProviders
         }
 
         /// <inheritdoc />
-        public async override Task<ERROR> DeleteMifareDesfireApplication(string _applicationMasterKey, DESFireKeyType _keyTypePiccMasterKey, uint _appID)
+        public async override Task<ERROR> DeleteMifareDesfireApplication(string _applicationMasterKey, DESFireKeyType _keyTypePiccMasterKey, uint _appID, bool authenticateToPICCFirst = true)
         {
             if (readerDevice.IsConnected)
             {
@@ -979,14 +979,15 @@ namespace RFiDGear.Infrastructure.ReaderProviders
 
                 try
                 {
-                    if (await AuthToMifareDesfireApplication(_applicationMasterKey, _keyTypePiccMasterKey, 0, 0) == ERROR.NoError)
+                    if (authenticateToPICCFirst)
                     {
-                        await readerDevice.MifareDesfire_DeleteApplicationAsync(_appID);
+                        // Best-effort: attempt PICC authentication first, matching the previous
+                        // behavior. The delete is still attempted below either way, since some
+                        // cards' PICC configuration allows free deletion without it.
+                        await AuthToMifareDesfireApplication(_applicationMasterKey, _keyTypePiccMasterKey, 0, 0);
                     }
-                    else
-                    {
-                        await readerDevice.MifareDesfire_DeleteApplicationAsync(_appID);
-                    }
+
+                    await readerDevice.MifareDesfire_DeleteApplicationAsync(_appID);
                 }
                 catch
                 {

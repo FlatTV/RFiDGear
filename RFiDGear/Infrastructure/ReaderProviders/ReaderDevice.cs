@@ -378,8 +378,13 @@ namespace RFiDGear.Infrastructure.ReaderProviders
         /// <param name="_applicationMasterKey">The 16 byte PICC master key, used to authenticate.</param>
         /// <param name="_keyType">The PICC MasterKey Type (byte): 3DES, 3K3DES, AES</param>
         /// <param name="_appID">The AppId to delete</param>
+        /// <param name="authenticateToPICCFirst">
+        /// When true (default), authenticates to the PICC master key before deleting.
+        /// When false, attempts the delete directly - only succeeds if the card's PICC
+        /// configuration allows free application deletion without a master key.
+        /// </param>
         /// <returns></returns>
-        public abstract Task<ERROR> DeleteMifareDesfireApplication(string _applicationMasterKey, DESFireKeyType _keyType, uint _appID);
+        public abstract Task<ERROR> DeleteMifareDesfireApplication(string _applicationMasterKey, DESFireKeyType _keyType, uint _appID, bool authenticateToPICCFirst = true);
 
         /// <summary>
         /// Deletes a MIFARE DESFire file inside an application after authenticating to the application.

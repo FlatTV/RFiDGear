@@ -1765,7 +1765,7 @@ namespace RFiDGear.Infrastructure.ReaderProviders
         }
 
         /// <inheritdoc />
-        public override async Task<ERROR> DeleteMifareDesfireApplication(string _applicationMasterKey, DESFireKeyType _keyType, uint _appID = 0)
+        public override async Task<ERROR> DeleteMifareDesfireApplication(string _applicationMasterKey, DESFireKeyType _keyType, uint _appID = 0, bool authenticateToPICCFirst = true)
         {
             try
             {
@@ -1795,6 +1795,34 @@ namespace RFiDGear.Infrastructure.ReaderProviders
                         card.getCardType() == "DESFireEV3")
                     {
                         var cmd = card.getCommands() as DESFireCommands;
+
+                        if (!authenticateToPICCFirst)
+                        {
+                            // Single attempt: skip authentication entirely. Only succeeds if the
+                            // PICC's configuration allows free application deletion; otherwise the
+                            // card rejects the command and we classify the error below without
+                            // retrying (a retry belongs to the caller, not this provider).
+                            try
+                            {
+                                cmd.selectApplication(0);
+                                cmd.deleteApplication(_appID);
+                                return ERROR.NoError;
+                            }
+                            catch (Exception e)
+                            {
+                                if (e.Message != "" && e.Message.Contains("same number already exists"))
+                                {
+                                    return ERROR.ProtocolConstraint;
+                                }
+                                else if (e.Message != "" && e.Message.Contains("status does not allow the requested command"))
+                                {
+                                    return ERROR.AuthFailure;
+                                }
+                                else
+                                    return ERROR.TransportError;
+                            }
+                        }
+
                         try
                         {
                             cmd.selectApplication(0);

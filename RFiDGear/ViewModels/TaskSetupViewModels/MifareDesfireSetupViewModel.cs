@@ -3166,52 +3166,76 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
 
                     if (CustomConverter.FormatMifareDesfireKeyStringWithSpacesEachByte(DesfireAppKeyCurrent) == KEY_ERROR.NO_ERROR)
                     {
-                        var result = await device.AuthToMifareDesfireApplication(
+                        if (IsValidAppNumberCurrent == false)
+                        {
+                            await SetErrorStatusAsync(ERROR.ProtocolConstraint, "{0}: Invalid App ID.\n", DateTime.Now);
+                            return;
+                        }
+
+                        // Attempt 1: try deleting without authenticating to the PICC master key
+                        // first. Some cards' PICC configuration permits free application deletion;
+                        // this avoids an unnecessary authentication attempt when it's not required.
+                        StatusText += string.Format("{0}: Trying to delete AppID {1} without PICC authentication...\n", DateTime.Now, AppNumberNewAsInt);
+
+                        var result = await device.DeleteMifareDesfireApplication(
+                            DesfireMasterKeyCurrent,
+                            SelectedDesfireMasterKeyEncryptionTypeCurrent,
+                            (uint)AppNumberNewAsInt,
+                            authenticateToPICCFirst: false);
+
+                        if (result == ERROR.NoError)
+                        {
+                            await SetOperationResultAsync(
+                                result,
+                                "{0}: Successfully Deleted AppID {1}\n",
+                                new object[] { DateTime.Now, AppNumberNewAsInt },
+                                "{0}: Unable to Remove AppID {1}: {2}\n",
+                                new object[] { DateTime.Now, AppNumberNewAsInt, result.ToString() });
+                            return;
+                        }
+
+                        bool cardRequiresPiccAuth = result == ERROR.AuthFailure || result == ERROR.PermissionDenied;
+
+                        if (!cardRequiresPiccAuth)
+                        {
+                            // Anything other than an auth/permission rejection (transport error,
+                            // app doesn't exist, etc.) won't be fixed by authenticating, so surface
+                            // it as-is instead of touching the card again.
+                            await SetErrorStatusAsync(result, "{0}: Unable to Remove AppID {1}: {2}\n", DateTime.Now, AppNumberNewAsInt, result.ToString());
+                            return;
+                        }
+
+                        // Attempt 2 (single retry): the card rejected free deletion, so this PICC
+                        // requires master-key authentication. Authenticate once, then retry the
+                        // delete exactly once more with the auth already established.
+                        StatusText += string.Format("{0}: Free deletion was denied; authenticating to PICC master key...\n", DateTime.Now);
+
+                        var authResult = await device.AuthToMifareDesfireApplication(
                                 DesfireMasterKeyCurrent,
                                 SelectedDesfireMasterKeyEncryptionTypeCurrent,
                                 0);
 
-                        if (IsValidAppNumberCurrent != false && result == ERROR.NoError)
+                        if (authResult != ERROR.NoError)
                         {
-                            StatusText += string.Format("{0}: Successfully Authenticated to PICC Master App 0\n", DateTime.Now);
-
-                            result = await device.DeleteMifareDesfireApplication(
-                                DesfireMasterKeyCurrent,
-                                SelectedDesfireMasterKeyEncryptionTypeCurrent,
-                                (uint)AppNumberNewAsInt);
-
-                            if (await SetOperationResultAsync(
-                                    result,
-                                    "{0}: Successfully Deleted AppID {1}\n",
-                                    new object[] { DateTime.Now, AppNumberNewAsInt },
-                                    "{0}: Unable to Remove AppID {1}: {2}\n",
-                                    new object[] { DateTime.Now, AppNumberNewAsInt, result.ToString() }))
-                            {
-                                return;
-                            }
+                            await SetErrorStatusAsync(authResult, "{0}: Authentication to PICC failed.\n", DateTime.Now);
                             return;
                         }
 
-                        else
-                        {
-                            StatusText += string.Format("{0}: Authentication to PICC failed. Try without Authentication...\n", DateTime.Now);
+                        StatusText += string.Format("{0}: Successfully Authenticated to PICC Master App 0\n", DateTime.Now);
 
-                            result = await device.DeleteMifareDesfireApplication(
-                                DesfireMasterKeyCurrent,
-                                SelectedDesfireMasterKeyEncryptionTypeCurrent,
-                                (uint)AppNumberNewAsInt);
+                        result = await device.DeleteMifareDesfireApplication(
+                            DesfireMasterKeyCurrent,
+                            SelectedDesfireMasterKeyEncryptionTypeCurrent,
+                            (uint)AppNumberNewAsInt,
+                            authenticateToPICCFirst: false); // already authenticated above; never repeat it here
 
-                            if (await SetOperationResultAsync(
-                                    result,
-                                    "{0}: Successfully deleted AppID {1}\n",
-                                    new object[] { DateTime.Now, AppNumberNewAsInt },
-                                    "{0}: Unable to deleted App: {1}\n",
-                                    new object[] { DateTime.Now, result.ToString() }))
-                            {
-                                return;
-                            }
-                            return;
-                        }
+                        await SetOperationResultAsync(
+                            result,
+                            "{0}: Successfully Deleted AppID {1}\n",
+                            new object[] { DateTime.Now, AppNumberNewAsInt },
+                            "{0}: Unable to Remove AppID {1}: {2}\n",
+                            new object[] { DateTime.Now, AppNumberNewAsInt, result.ToString() });
+                        return;
                     }
                 }
                 else
