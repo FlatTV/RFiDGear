@@ -446,9 +446,13 @@ namespace RFiDGear.ViewModel
 
                                     Children.Add(new RFiDChipChildLayerViewModel(new MifareDesfireAppModel(appID), this, CardType, dialogs));
 
+                                    // GetKeySettings does not require authentication per the DESFire spec, so
+                                    // read without authenticating: apps created with an unknown/foreign key
+                                    // (i.e. anything not made by RFiDGear with its configured default key)
+                                    // still show their key settings instead of silently being skipped below.
                                     var appSettingsResult = await device.GetMifareDesfireAppSettings(settings.DefaultSpecification.MifareDesfireDefaultSecuritySettings.First(x => x.KeyType == KeyType_MifareDesFireKeyType.DefaultDesfireCardApplicationMasterKey).Key,
                                                                            settings.DefaultSpecification.MifareDesfireDefaultSecuritySettings.First(x => x.KeyType == KeyType_MifareDesFireKeyType.DefaultDesfireCardApplicationMasterKey).EncryptionType,
-                                                                           0, (int)appID);
+                                                                           0, (int)appID, authenticateBeforeReading: false);
                                     if (appSettingsResult.Code == ERROR.NoError)
                                     {
                                         Children.First(x => x.AppID == appID).Children.Add(new RFiDChipGrandChildLayerViewModel(string.Format("Available Keys: {0}", device.MaxNumberOfAppKeys)));
