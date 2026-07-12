@@ -401,8 +401,6 @@ namespace RFiDGear.ViewModel
 
                     try
                     {
-                        _ = await device.GetMifareDesfireAppSettings(settings.DefaultSpecification.MifareDesfireDefaultSecuritySettings[0].Key, settings.DefaultSpecification.MifareDesfireDefaultSecuritySettings[0].EncryptionType);
-
                         uint[] appIDs = null;
 
                         if (await device.GetMiFareDESFireChipAppIDs(
@@ -433,6 +431,25 @@ namespace RFiDGear.ViewModel
                         Children.Add(
                             new RFiDChipChildLayerViewModel(
                                 new MifareDesfireAppModel(0), this, CardType, dialogs));
+
+                        // App 0 is the PICC itself, so it's never returned by GetMiFareDESFireChipAppIDs
+                        // and is skipped in the loop below - populate its key settings here instead,
+                        // the same way each app's settings are populated further down.
+                        var piccSettingsResult = await device.GetMifareDesfireAppSettings(
+                            settings.DefaultSpecification.MifareDesfireDefaultSecuritySettings.First(x => x.KeyType == KeyType_MifareDesFireKeyType.DefaultDesfireCardApplicationMasterKey).Key,
+                            settings.DefaultSpecification.MifareDesfireDefaultSecuritySettings.First(x => x.KeyType == KeyType_MifareDesFireKeyType.DefaultDesfireCardApplicationMasterKey).EncryptionType,
+                            0, 0, authenticateBeforeReading: false);
+                        if (piccSettingsResult.Code == ERROR.NoError)
+                        {
+                            Children.First(x => x.AppID == 0).Children.Add(new RFiDChipGrandChildLayerViewModel(string.Format("Available Keys: {0}", device.MaxNumberOfAppKeys)));
+                            Children.First(x => x.AppID == 0).Children.Add(new RFiDChipGrandChildLayerViewModel(string.Format("App Encryption Type: {0}", Enum.GetName(typeof(DESFireKeyType), (device.EncryptionType)))));
+                            Children.First(x => x.AppID == 0).Children.Add(new RFiDChipGrandChildLayerViewModel(string.Format("Key Settings: {0}", Enum.GetName(typeof(DESFireKeySettings), (device.DesfireAppKeySetting & (DESFireKeySettings)0xF0)))));
+
+                            Children.First(x => x.AppID == 0).Children.Add(new RFiDChipGrandChildLayerViewModel(string.Format("Allow Change AMK: {0}", (device.DesfireAppKeySetting & (DESFireKeySettings)0x01) == (DESFireKeySettings)0x01 ? "yes" : "no")));
+                            Children.First(x => x.AppID == 0).Children.Add(new RFiDChipGrandChildLayerViewModel(string.Format("Allow Listing without AMK: {0}", (device.DesfireAppKeySetting & (DESFireKeySettings)0x02) == (DESFireKeySettings)0x02 ? "yes" : "no")));
+                            Children.First(x => x.AppID == 0).Children.Add(new RFiDChipGrandChildLayerViewModel(string.Format("Allow Create/Delete without AMK: {0}", (device.DesfireAppKeySetting & (DESFireKeySettings)0x04) == (DESFireKeySettings)0x04 ? "yes" : "no")));
+                            Children.First(x => x.AppID == 0).Children.Add(new RFiDChipGrandChildLayerViewModel(string.Format("Allow Change Config: {0}", (device.DesfireAppKeySetting & (DESFireKeySettings)0x08) == (DESFireKeySettings)0x08 ? "yes" : "no")));
+                        }
                         try
                         {
                             if (appIDs != null)
