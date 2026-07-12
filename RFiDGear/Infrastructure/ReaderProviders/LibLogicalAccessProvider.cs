@@ -2140,6 +2140,40 @@ namespace RFiDGear.Infrastructure.ReaderProviders
             }
         }
 
+        /// <summary>
+        /// Converts a LibLogicalAccess FileSetting struct into RFiDGear's own DESFireFileSettings
+        /// model, including the data-file size. Only StdDataFile/BackupFile carry a DataFileSetting
+        /// on the wire (record/value files use their own union members instead), so dataFile is left
+        /// unset for other file types.
+        /// </summary>
+        private static DESFireFileSettings BuildDesfireFileSettingsFromChip(DESFireCommands.FileSetting fsFromChip)
+        {
+            var result = new DESFireFileSettings
+            {
+                accessRights = fsFromChip.accessRights,
+                comSett = fsFromChip.comSett,
+                FileType = fsFromChip.fileType
+            };
+
+            if (fsFromChip.fileType == (byte)FileType_MifareDesfireFileType.StdDataFile ||
+                fsFromChip.fileType == (byte)FileType_MifareDesfireFileType.BackupFile)
+            {
+                // getDataFile() returns a native-backed IDisposable object (confirmed via the
+                // generated SWIG binding) - fileSize on it is a 3-byte little-endian array per the
+                // DESFire spec, which we combine into the single uint RFiDGear's own model expects.
+                using (var dataFileFromChip = fsFromChip.getDataFile())
+                {
+                    var size = dataFileFromChip.fileSize;
+                    result.dataFile = new DataFileSetting
+                    {
+                        fileSize = (uint)(size[0] | (size[1] << 8) | (size[2] << 16))
+                    };
+                }
+            }
+
+            return result;
+        }
+
         /// <inheritdoc />
         public override async Task<ERROR> GetMifareDesfireFileSettings(string _applicationMasterKey, DESFireKeyType _keyType, int _keyNumberCurrent = 0, int _appID = 0, int _fileNo = 0)
         {
@@ -2175,13 +2209,7 @@ namespace RFiDGear.Infrastructure.ReaderProviders
                                 try
                                 {
                                     fsFromChip = cmd.getFileSettings((byte)_fileNo);
-                                    DesfireFileSettings = new DESFireFileSettings
-                                    {
-                                        accessRights = fsFromChip.accessRights,
-                                        comSett = fsFromChip.comSett,
-                                        //dataFile = fs.getDataFile(),
-                                        FileType = fsFromChip.fileType
-                                    };
+                                    DesfireFileSettings = BuildDesfireFileSettingsFromChip(fsFromChip);
 
                                     return ERROR.NoError;
                                 }
@@ -2201,13 +2229,7 @@ namespace RFiDGear.Infrastructure.ReaderProviders
                             }
 
                             fsFromChip = cmd.getFileSettings((byte)_fileNo);
-                            DesfireFileSettings = new DESFireFileSettings
-                            {
-                                accessRights = fsFromChip.accessRights,
-                                comSett = fsFromChip.comSett,
-                                //dataFile = fs.getDataFile(),
-                                FileType = fsFromChip.fileType
-                            };
+                            DesfireFileSettings = BuildDesfireFileSettingsFromChip(fsFromChip);
 
                             return ERROR.NoError;
                         }
