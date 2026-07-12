@@ -11,6 +11,7 @@
 *.zip
 *.htm
 *.txt
+*.patch
 /RFiDGear.Tests/obj
 /RFiDGear.Tests/bin
 /RFiDGearSetup/RFiDGear_Setup_x64/obj

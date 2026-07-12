@@ -379,12 +379,23 @@ namespace RFiDGear.Infrastructure.ReaderProviders
         /// <param name="_keyType">The PICC MasterKey Type (byte): 3DES, 3K3DES, AES</param>
         /// <param name="_appID">The AppId to delete</param>
         /// <param name="authenticateToPICCFirst">
-        /// When true (default), authenticates to the PICC master key before deleting.
-        /// When false, attempts the delete directly - only succeeds if the card's PICC
+        /// When true (default), authenticates to the PICC master key before deleting, falling back to
+        /// authenticating directly to the target application (see <paramref name="_applicationOwnMasterKey"/>)
+        /// if that fails. When false, attempts the delete directly - only succeeds if the card's PICC
         /// configuration allows free application deletion without a master key.
         /// </param>
+        /// <param name="_applicationOwnMasterKey">
+        /// Optional. Per the DESFire spec, DeleteApplication can also be authorized by authenticating
+        /// directly to the target application with its own (not the PICC's) master key. If provided, this
+        /// key is used for that fallback instead of re-using <paramref name="_applicationMasterKey"/> -
+        /// the two are frequently different keys. Ignored when <paramref name="authenticateToPICCFirst"/> is false.
+        /// </param>
+        /// <param name="_applicationOwnMasterKeyType">
+        /// Key type for <paramref name="_applicationOwnMasterKey"/>. Defaults to <paramref name="_keyType"/> when not specified.
+        /// </param>
         /// <returns></returns>
-        public abstract Task<ERROR> DeleteMifareDesfireApplication(string _applicationMasterKey, DESFireKeyType _keyType, uint _appID, bool authenticateToPICCFirst = true);
+        public abstract Task<ERROR> DeleteMifareDesfireApplication(string _applicationMasterKey, DESFireKeyType _keyType, uint _appID, bool authenticateToPICCFirst = true,
+            string _applicationOwnMasterKey = null, DESFireKeyType? _applicationOwnMasterKeyType = null);
 
         /// <summary>
         /// Deletes a MIFARE DESFire file inside an application after authenticating to the application.

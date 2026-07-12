@@ -1771,7 +1771,8 @@ namespace RFiDGear.Infrastructure.ReaderProviders
         }
 
         /// <inheritdoc />
-        public override async Task<ERROR> DeleteMifareDesfireApplication(string _applicationMasterKey, DESFireKeyType _keyType, uint _appID = 0, bool authenticateToPICCFirst = true)
+        public override async Task<ERROR> DeleteMifareDesfireApplication(string _applicationMasterKey, DESFireKeyType _keyType, uint _appID = 0, bool authenticateToPICCFirst = true,
+            string _applicationOwnMasterKey = null, DESFireKeyType? _applicationOwnMasterKeyType = null)
         {
             try
             {
@@ -1790,6 +1791,19 @@ namespace RFiDGear.Infrastructure.ReaderProviders
                 CustomConverter.FormatMifareDesfireKeyStringWithSpacesEachByte(_applicationMasterKey);
                 aiToUse.masterCardKey.fromString(CustomConverter.DesfireKeyToCheck);
                 aiToUse.masterCardKey.setKeyType((LibLogicalAccess.Card.DESFireKeyType)_keyType);
+
+                // Per the DESFire spec, DeleteApplication can also be authorized by authenticating
+                // directly to the target application with its own master key - which is frequently
+                // different from the PICC master key above. Fall back to reusing the PICC key only
+                // when no distinct application key was supplied, to preserve old call sites' behavior.
+                DESFireAccessInfo aiAppOwnKey = aiToUse;
+                if (!string.IsNullOrEmpty(_applicationOwnMasterKey))
+                {
+                    aiAppOwnKey = new DESFireAccessInfo();
+                    CustomConverter.FormatMifareDesfireKeyStringWithSpacesEachByte(_applicationOwnMasterKey);
+                    aiAppOwnKey.masterCardKey.fromString(CustomConverter.DesfireKeyToCheck);
+                    aiAppOwnKey.masterCardKey.setKeyType((LibLogicalAccess.Card.DESFireKeyType)(_applicationOwnMasterKeyType ?? _keyType));
+                }
 
                 if (await tryInitReader())
                 {
@@ -1841,8 +1855,12 @@ namespace RFiDGear.Infrastructure.ReaderProviders
                         {
                             try
                             {
+                                // Fallback: authenticate directly to the target application with its
+                                // own master key (aiAppOwnKey) rather than the PICC key. A fresh
+                                // SelectApplication resets whatever authentication state the failed
+                                // attempt above left behind, so this is a clean, independent attempt.
                                 cmd.selectApplication(_appID);
-                                cmd.authenticate(0, aiToUse.masterCardKey);
+                                cmd.authenticate(0, aiAppOwnKey.masterCardKey);
                                 cmd.deleteApplication(_appID);
                                 return ERROR.NoError;
                             }

@@ -961,7 +961,8 @@ namespace RFiDGear.Infrastructure.ReaderProviders
         }
 
         /// <inheritdoc />
-        public async override Task<ERROR> DeleteMifareDesfireApplication(string _applicationMasterKey, DESFireKeyType _keyTypePiccMasterKey, uint _appID, bool authenticateToPICCFirst = true)
+        public async override Task<ERROR> DeleteMifareDesfireApplication(string _applicationMasterKey, DESFireKeyType _keyTypePiccMasterKey, uint _appID, bool authenticateToPICCFirst = true,
+            string _applicationOwnMasterKey = null, DESFireKeyType? _applicationOwnMasterKeyType = null)
         {
             if (readerDevice.IsConnected)
             {
@@ -977,23 +978,48 @@ namespace RFiDGear.Infrastructure.ReaderProviders
                     }
                 }
 
+                if (!authenticateToPICCFirst)
+                {
+                    // Single attempt: skip authentication entirely, matching LibLogicalAccessProvider's
+                    // equivalent branch. A retry belongs to the caller, not this provider.
+                    try
+                    {
+                        await readerDevice.MifareDesfire_DeleteApplicationAsync(_appID);
+                        return ERROR.NoError;
+                    }
+                    catch
+                    {
+                        return ERROR.AuthFailure;
+                    }
+                }
+
                 try
                 {
-                    if (authenticateToPICCFirst)
-                    {
-                        // Best-effort: attempt PICC authentication first, matching the previous
-                        // behavior. The delete is still attempted below either way, since some
-                        // cards' PICC configuration allows free deletion without it.
-                        await AuthToMifareDesfireApplication(_applicationMasterKey, _keyTypePiccMasterKey, 0, 0);
-                    }
-
+                    await AuthToMifareDesfireApplication(_applicationMasterKey, _keyTypePiccMasterKey, 0, 0);
                     await readerDevice.MifareDesfire_DeleteApplicationAsync(_appID);
+                    return ERROR.NoError;
                 }
                 catch
                 {
+                    // Fallback: per the DESFire spec, DeleteApplication can also be authorized by
+                    // authenticating directly to the target application with its own master key -
+                    // which is frequently different from the PICC master key tried above.
+                    if (!string.IsNullOrEmpty(_applicationOwnMasterKey))
+                    {
+                        try
+                        {
+                            await AuthToMifareDesfireApplication(_applicationOwnMasterKey, _applicationOwnMasterKeyType ?? _keyTypePiccMasterKey, 0, (int)_appID);
+                            await readerDevice.MifareDesfire_DeleteApplicationAsync(_appID);
+                            return ERROR.NoError;
+                        }
+                        catch
+                        {
+                            return ERROR.AuthFailure;
+                        }
+                    }
+
                     return ERROR.AuthFailure;
                 }
-                return ERROR.NoError;
             }
 
             else

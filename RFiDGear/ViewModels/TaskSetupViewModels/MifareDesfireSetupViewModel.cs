@@ -770,7 +770,7 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
                         break;
 
                     case TaskType_MifareDesfireTask.DeleteApplication:
-                        SetTabAvailability(false, false, true, true, false, false, true);
+                        SetTabAvailability(false, false, true, true, false, true, true);
                         break;
 
                     case TaskType_MifareDesfireTask.DeleteFile:
@@ -2338,25 +2338,15 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
                             return;
                         }
 
-                        // Attempt 2 (single retry): the card rejected free creation, so this PICC
-                        // requires master-key authentication. Authenticate once, then retry the
-                        // create exactly once more with the auth already established.
+                        // Attempt 2: the card rejected free creation, so this PICC requires
+                        // master-key authentication. Let the provider authenticate and create in
+                        // one atomic call (authenticateToPICCFirst: true) rather than authenticating
+                        // here and retrying separately: the create call issues its own
+                        // SelectApplication internally regardless, which resets whatever
+                        // authentication state a prior, separate AuthToMifareDesfireApplication call
+                        // established - so doing it as two calls would silently throw the
+                        // authentication away before it could be used.
                         StatusText += string.Format("{0}: Free creation was denied; authenticating to PICC master key...\n", DateTime.Now);
-
-                        var authResult = await device.AuthToMifareDesfireApplication(
-                                  DesfireMasterKeyCurrent,
-                                  SelectedDesfireMasterKeyEncryptionTypeCurrent,
-                                  0);
-
-                        if (authResult != ERROR.NoError)
-                        {
-                            StatusText += string.Format("{0}: Authentication to PICC failed.\n", DateTime.Now);
-                            CurrentTaskErrorLevel = authResult;
-                            await UpdateReaderStatusCommand.ExecuteAsync(false);
-                            return;
-                        }
-
-                        StatusText += string.Format("{0}: Successfully Authenticated to App 0\n", DateTime.Now);
 
                         createResult = await device.CreateMifareDesfireApplication(
                             DesfireMasterKeyCurrent,
@@ -2365,7 +2355,7 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
                             SelectedDesfireAppKeyEncryptionTypeCreateNewApp,
                             selectedDesfireAppMaxNumberOfKeysAsInt,
                             AppNumberNewAsInt,
-                            authenticateToPICCFirst: false); // already authenticated above; never repeat it here
+                            authenticateToPICCFirst: true);
 
                         if (createResult.Code == ERROR.NoError)
                         {
@@ -3205,29 +3195,24 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
                             return;
                         }
 
-                        // Attempt 2 (single retry): the card rejected free deletion, so this PICC
-                        // requires master-key authentication. Authenticate once, then retry the
-                        // delete exactly once more with the auth already established.
-                        StatusText += string.Format("{0}: Free deletion was denied; authenticating to PICC master key...\n", DateTime.Now);
-
-                        var authResult = await device.AuthToMifareDesfireApplication(
-                                DesfireMasterKeyCurrent,
-                                SelectedDesfireMasterKeyEncryptionTypeCurrent,
-                                0);
-
-                        if (authResult != ERROR.NoError)
-                        {
-                            await SetErrorStatusAsync(authResult, "{0}: Authentication to PICC failed.\n", DateTime.Now);
-                            return;
-                        }
-
-                        StatusText += string.Format("{0}: Successfully Authenticated to PICC Master App 0\n", DateTime.Now);
+                        // Attempt 2: the card rejected free deletion, so this PICC/application
+                        // requires master-key authentication. Per the DESFire spec, DeleteApplication
+                        // can be authorized either via the PICC master key or via the target
+                        // application's own master key - try both in a single atomic provider call
+                        // (authenticateToPICCFirst: true), rather than authenticating here and
+                        // retrying separately: a fresh SelectApplication - which the delete call
+                        // issues internally regardless - resets whatever authentication state a
+                        // prior, separate AuthToMifareDesfireApplication call established, so doing
+                        // it as two calls would silently throw the authentication away.
+                        StatusText += string.Format("{0}: Free deletion was denied; authenticating with PICC and/or application master key...\n", DateTime.Now);
 
                         result = await device.DeleteMifareDesfireApplication(
                             DesfireMasterKeyCurrent,
                             SelectedDesfireMasterKeyEncryptionTypeCurrent,
                             (uint)AppNumberNewAsInt,
-                            authenticateToPICCFirst: false); // already authenticated above; never repeat it here
+                            authenticateToPICCFirst: true,
+                            _applicationOwnMasterKey: DesfireAppKeyCurrent,
+                            _applicationOwnMasterKeyType: SelectedDesfireAppKeyEncryptionTypeCurrent);
 
                         await SetOperationResultAsync(
                             result,
