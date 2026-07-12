@@ -770,7 +770,7 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
                         break;
 
                     case TaskType_MifareDesfireTask.DeleteApplication:
-                        SetTabAvailability(false, false, true, true, false, true, true);
+                        SetTabAvailability(false, false, true, true, true, true, true);
                         break;
 
                     case TaskType_MifareDesfireTask.DeleteFile:

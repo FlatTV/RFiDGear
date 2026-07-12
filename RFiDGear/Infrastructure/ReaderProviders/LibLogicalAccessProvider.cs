@@ -1867,6 +1867,26 @@ namespace RFiDGear.Infrastructure.ReaderProviders
 
                             catch (Exception e)
                             {
+                                // The delete can throw here even when it actually succeeded on the
+                                // card: we just selected and authenticated to the very application
+                                // we deleted, and tearing down that context afterward can upset the
+                                // underlying library's bookkeeping. Verify the real outcome (is the
+                                // AppID still present?) rather than trusting the exception blindly.
+                                try
+                                {
+                                    cmd.selectApplication(0);
+                                    UIntCollection remainingAppIDs = cmd.getApplicationIDs();
+                                    if (remainingAppIDs == null || !remainingAppIDs.ToArray().Contains(_appID))
+                                    {
+                                        return ERROR.NoError;
+                                    }
+                                }
+                                catch
+                                {
+                                    // Verification itself failed - fall through and classify the
+                                    // original exception below instead.
+                                }
+
                                 if (e.Message != "" && e.Message.Contains("same number already exists"))
                                 {
                                     return ERROR.ProtocolConstraint;
