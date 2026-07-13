@@ -2091,6 +2091,13 @@ namespace RFiDGear.Infrastructure.ReaderProviders
                             {
                                 try
                                 {
+                                    // A failed authenticate() attempt can leave the DESFire session
+                                    // in a state where the next command needs a fresh
+                                    // SelectApplication before it will succeed - reselect explicitly
+                                    // rather than relying on whatever state the failed auth left
+                                    // behind, then read file IDs unauthenticated (GetFileIDs doesn't
+                                    // require auth per the DESFire spec).
+                                    cmd.selectApplication((uint)_appID);
                                     fileIDsObject = cmd.getFileIDs();
                                     FileIDList = fileIDsObject.ToArray();
                                     return ERROR.NoError;
@@ -2208,6 +2215,11 @@ namespace RFiDGear.Infrastructure.ReaderProviders
                             {
                                 try
                                 {
+                                    // See GetMifareDesfireFileList for why this reselect is needed:
+                                    // a failed authenticate() can leave the session in a state where
+                                    // the next command needs a fresh SelectApplication first.
+                                    // GetFileSettings doesn't require auth per the DESFire spec.
+                                    cmd.selectApplication((uint)_appID);
                                     fsFromChip = cmd.getFileSettings((byte)_fileNo);
                                     DesfireFileSettings = BuildDesfireFileSettingsFromChip(fsFromChip);
 
