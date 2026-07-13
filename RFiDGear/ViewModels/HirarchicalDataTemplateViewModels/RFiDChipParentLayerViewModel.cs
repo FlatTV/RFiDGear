@@ -501,10 +501,15 @@ namespace RFiDGear.ViewModel
                                                 grandChild.Children.Add(new RFiDChipGrandGrandChildLayerViewModel(string.Format("FileType: {0}", Enum.GetName(typeof(FileType_MifareDesfireFileType), device.DesfireFileSettings.FileType)), grandChild));
                                                 grandChild.Children.Add(new RFiDChipGrandGrandChildLayerViewModel(string.Format("FileSize: {0}Bytes", device.DesfireFileSettings.dataFile.fileSize.ToString(CultureInfo.CurrentCulture)), grandChild));
                                                 grandChild.Children.Add(new RFiDChipGrandGrandChildLayerViewModel(string.Format("CommMode: {0}", Enum.GetName(typeof(EncryptionMode), device.DesfireFileSettings.comSett)), grandChild));
-                                                grandChild.Children.Add(new RFiDChipGrandGrandChildLayerViewModel(string.Format("Read: {0}", Enum.GetName(typeof(TaskAccessRights), (device.DesfireFileSettings.accessRights[0] & 0x0F))), grandChild));
-                                                grandChild.Children.Add(new RFiDChipGrandGrandChildLayerViewModel(string.Format("Write: {0}", Enum.GetName(typeof(TaskAccessRights), (device.DesfireFileSettings.accessRights[0] & 0xF0) >> 4)), grandChild));
-                                                grandChild.Children.Add(new RFiDChipGrandGrandChildLayerViewModel(string.Format("RW: {0}", Enum.GetName(typeof(TaskAccessRights), (device.DesfireFileSettings.accessRights[1] & 0x0F))), grandChild)); //lsb, upper nibble
-                                                grandChild.Children.Add(new RFiDChipGrandGrandChildLayerViewModel(string.Format("Change: {0}", Enum.GetName(typeof(TaskAccessRights), (device.DesfireFileSettings.accessRights[1] & 0xF0) >> 4)), grandChild)); //lsb , lower nibble
+                                                // AccessRights is a 2-byte DESFire field, transmitted LSB-first like other
+                                                // multi-byte DESFire fields. Per the NXP spec, across the conceptual
+                                                // MSB->LSB nibble order it's Read|Write|ReadWrite|Change - which lands as:
+                                                // byte[1] high nibble = Read, byte[1] low nibble = Write,
+                                                // byte[0] high nibble = ReadWrite, byte[0] low nibble = Change.
+                                                grandChild.Children.Add(new RFiDChipGrandGrandChildLayerViewModel(string.Format("Read: {0}", Enum.GetName(typeof(TaskAccessRights), (device.DesfireFileSettings.accessRights[1] & 0xF0) >> 4)), grandChild));
+                                                grandChild.Children.Add(new RFiDChipGrandGrandChildLayerViewModel(string.Format("Write: {0}", Enum.GetName(typeof(TaskAccessRights), (device.DesfireFileSettings.accessRights[1] & 0x0F))), grandChild));
+                                                grandChild.Children.Add(new RFiDChipGrandGrandChildLayerViewModel(string.Format("RW: {0}", Enum.GetName(typeof(TaskAccessRights), (device.DesfireFileSettings.accessRights[0] & 0xF0) >> 4)), grandChild));
+                                                grandChild.Children.Add(new RFiDChipGrandGrandChildLayerViewModel(string.Format("Change: {0}", Enum.GetName(typeof(TaskAccessRights), (device.DesfireFileSettings.accessRights[0] & 0x0F))), grandChild));
                                             }
                                         }
                                     }
