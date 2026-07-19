@@ -2145,12 +2145,6 @@ namespace RFiDGear.Infrastructure.ReaderProviders
                                         return ERROR.TransportError;
                                     }
 
-                                    // A failed authenticate() attempt can leave the DESFire session
-                                    // in a state where the next command needs a fresh
-                                    // SelectApplication before it will succeed - reselect explicitly
-                                    // rather than relying on whatever state the failed auth left
-                                    // behind, then read file IDs unauthenticated (GetFileIDs doesn't
-                                    // require auth per the DESFire spec).
                                     cmd.selectApplication((uint)_appID);
                                     fileIDsObject = cmd.getFileIDs();
                                     FileIDList = fileIDsObject.ToArray();
