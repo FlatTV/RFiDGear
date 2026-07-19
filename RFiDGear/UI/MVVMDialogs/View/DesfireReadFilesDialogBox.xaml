@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<Window
+    x:Class="RFiDGear.UI.MVVMDialogs.View.DesfireReadFilesDialogBox"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:dal="clr-namespace:RFiDGear.Infrastructure"
+    Title="{Binding Caption}"
+    Width="420"
+    Height="330"
+    ResizeMode="NoResize"
+    WindowStartupLocation="CenterOwner"
+    HorizontalContentAlignment="Left"
+    FontFamily="Segoe UI"
+    FontWeight="Normal">
+    <Window.Resources>
+        <dal:ResourceLoader x:Key="Localization" />
+    </Window.Resources>
+    <Grid Margin="8,8,8,8">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="auto" />
+            <RowDefinition Height="auto" />
+            <RowDefinition Height="auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="60" />
+        </Grid.RowDefinitions>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="140" />
+            <ColumnDefinition Width="*" MinWidth="100" />
+        </Grid.ColumnDefinitions>
+
+        <Label
+            Grid.Row="0"
+            Grid.Column="0"
+            VerticalContentAlignment="Center"
+            HorizontalContentAlignment="Left"
+            Content="{Binding LocalizationResourceSet, Converter={StaticResource Localization}, ConverterParameter='labelContentDesfireReadFilesKey'}" />
+        <TextBox
+            Grid.Row="0"
+            Grid.Column="1"
+            Height="26"
+            Margin="0,4,0,4"
+            VerticalAlignment="Center"
+            HorizontalAlignment="Stretch"
+            VerticalContentAlignment="Center"
+            Text="{Binding AppKey, UpdateSourceTrigger=PropertyChanged, Mode=TwoWay}" />
+
+        <Label
+            Grid.Row="1"
+            Grid.Column="0"
+            VerticalContentAlignment="Center"
+            HorizontalContentAlignment="Left"
+            Content="{Binding LocalizationResourceSet, Converter={StaticResource Localization}, ConverterParameter='labelContentDesfireReadFilesKeyType'}" />
+        <ComboBox
+            Grid.Row="1"
+            Grid.Column="1"
+            Height="26"
+            Margin="0,4,0,4"
+            VerticalAlignment="Center"
+            HorizontalAlignment="Stretch"
+            ItemsSource="{dal:Enumerate {x:Type dal:DESFireKeyType}}"
+            SelectedItem="{Binding SelectedKeyType, Converter={StaticResource Localization}, ConverterParameter={x:Type dal:DESFireKeyType}, UpdateSourceTrigger=PropertyChanged, Mode=TwoWay}" />
+
+        <Label
+            Grid.Row="2"
+            Grid.Column="0"
+            VerticalContentAlignment="Center"
+            HorizontalContentAlignment="Left"
+            Content="{Binding LocalizationResourceSet, Converter={StaticResource Localization}, ConverterParameter='labelContentDesfireReadFilesKeyNumber'}" />
+        <ComboBox
+            Grid.Row="2"
+            Grid.Column="1"
+            Height="26"
+            Margin="0,4,0,4"
+            VerticalAlignment="Center"
+            HorizontalAlignment="Stretch"
+            ItemsSource="{Binding KeyNumbers}"
+            SelectedItem="{Binding SelectedKeyNumber, UpdateSourceTrigger=PropertyChanged, Mode=TwoWay}" />
+
+        <TextBox
+            Grid.Row="3"
+            Grid.Column="0"
+            Grid.ColumnSpan="2"
+            Margin="0,4,0,4"
+            IsReadOnly="True"
+            VerticalScrollBarVisibility="Auto"
+            TextWrapping="Wrap"
+            Background="WhiteSmoke"
+            Text="{Binding StatusText, Mode=OneWay}" />
+
+        <Button
+            Grid.Row="4"
+            Grid.Column="0"
+            Width="120"
+            Height="26"
+            Padding="5,2"
+            HorizontalAlignment="Left"
+            VerticalAlignment="Bottom"
+            Command="{Binding ReadFilesCommand}"
+            IsEnabled="{Binding IsNotBusy}"
+            Content="{Binding LocalizationResourceSet, Converter={StaticResource Localization}, ConverterParameter='buttonContentDesfireReadFilesRead'}" />
+        <Button
+            Grid.Row="4"
+            Grid.Column="1"
+            Width="90"
+            Height="26"
+            Padding="5,2"
+            HorizontalAlignment="Right"
+            VerticalAlignment="Bottom"
+            IsDefault="True"
+            Command="{Binding CloseCommand}"
+            Content="{Binding LocalizationResourceSet, Converter={StaticResource Localization}, ConverterParameter='buttonContentDesfireReadFilesClose'}" />
+    </Grid>
+</Window>

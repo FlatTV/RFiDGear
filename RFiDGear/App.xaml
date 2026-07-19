@@ -22,6 +22,7 @@
             <mainview:Splash x:Key="{x:Type vm:SplashScreenViewModel}" x:Shared="False" />
             
             <dialogsview:CustomDialogBox x:Key="{x:Type dialogsvm:CustomDialogViewModel}" x:Shared="False" />
+            <dialogsview:DesfireReadFilesDialogBox x:Key="{x:Type dialogsvm:DesfireReadFilesDialogViewModel}" x:Shared="False" />
 
             <mainview:CommonTaskView x:Key="{x:Type taskvm:CommonTaskViewModel}" x:Shared="False" />
             <mainview:GenericChipTaskView x:Key="{x:Type taskvm:GenericChipTaskViewModel}" x:Shared="False" />

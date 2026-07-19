@@ -1709,4 +1709,40 @@ https://github.com/c3rebro/rfidgear</value>
   <data name="ENUM.TaskType_MifareDesfireTask.PICCMasterKeySettingsChangeover" xml:space="preserve">
     <value>PICC Master Key Settings ändern</value>
   </data>
+  <data name="contextMenuDesfireReadFilesWithKey" xml:space="preserve">
+    <value>Dateien einlesen (mit Schlüssel)</value>
+  </data>
+  <data name="dialogCaptionDesfireReadFilesWithKey" xml:space="preserve">
+    <value>Dateien einlesen (mit Schlüssel)</value>
+  </data>
+  <data name="labelContentDesfireReadFilesKey" xml:space="preserve">
+    <value>App Schlüssel</value>
+  </data>
+  <data name="labelContentDesfireReadFilesKeyType" xml:space="preserve">
+    <value>Schlüsseltyp</value>
+  </data>
+  <data name="labelContentDesfireReadFilesKeyNumber" xml:space="preserve">
+    <value>Schlüsselnummer</value>
+  </data>
+  <data name="buttonContentDesfireReadFilesRead" xml:space="preserve">
+    <value>Dateien einlesen</value>
+  </data>
+  <data name="buttonContentDesfireReadFilesClose" xml:space="preserve">
+    <value>Schließen</value>
+  </data>
+  <data name="statusDesfireReadFilesNoApp" xml:space="preserve">
+    <value>Keine Applikation ausgewählt.</value>
+  </data>
+  <data name="statusDesfireReadFilesReading" xml:space="preserve">
+    <value>Lese Dateien...</value>
+  </data>
+  <data name="statusDesfireReadFilesNoReader" xml:space="preserve">
+    <value>Kein Kartenleser verbunden.</value>
+  </data>
+  <data name="statusDesfireReadFilesFailed" xml:space="preserve">
+    <value>Fehler beim Lesen: {0}</value>
+  </data>
+  <data name="statusDesfireReadFilesSuccess" xml:space="preserve">
+    <value>{0} Datei(en) erfolgreich eingelesen.</value>
+  </data>
 </root>

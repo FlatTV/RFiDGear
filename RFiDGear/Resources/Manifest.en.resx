@@ -1687,4 +1687,40 @@ https://github.com/c3rebro/rfidgear</value>
   <data name="ENUM.TaskType_MifareDesfireTask.PICCMasterKeySettingsChangeover" xml:space="preserve">
     <value>Change PICC Master Key Settings</value>
   </data>
+  <data name="contextMenuDesfireReadFilesWithKey" xml:space="preserve">
+    <value>Read Files (with Key)</value>
+  </data>
+  <data name="dialogCaptionDesfireReadFilesWithKey" xml:space="preserve">
+    <value>Read Files (with Key)</value>
+  </data>
+  <data name="labelContentDesfireReadFilesKey" xml:space="preserve">
+    <value>App Key</value>
+  </data>
+  <data name="labelContentDesfireReadFilesKeyType" xml:space="preserve">
+    <value>Key Type</value>
+  </data>
+  <data name="labelContentDesfireReadFilesKeyNumber" xml:space="preserve">
+    <value>Key Number</value>
+  </data>
+  <data name="buttonContentDesfireReadFilesRead" xml:space="preserve">
+    <value>Read Files</value>
+  </data>
+  <data name="buttonContentDesfireReadFilesClose" xml:space="preserve">
+    <value>Close</value>
+  </data>
+  <data name="statusDesfireReadFilesNoApp" xml:space="preserve">
+    <value>No application selected.</value>
+  </data>
+  <data name="statusDesfireReadFilesReading" xml:space="preserve">
+    <value>Reading files...</value>
+  </data>
+  <data name="statusDesfireReadFilesNoReader" xml:space="preserve">
+    <value>No reader connected.</value>
+  </data>
+  <data name="statusDesfireReadFilesFailed" xml:space="preserve">
+    <value>Failed to read: {0}</value>
+  </data>
+  <data name="statusDesfireReadFilesSuccess" xml:space="preserve">
+    <value>Successfully read {0} file(s).</value>
+  </data>
 </root>

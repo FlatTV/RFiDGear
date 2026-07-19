@@ -16,6 +16,7 @@ using System.Xml.Serialization;
 using System.Windows.Navigation;
 using RFiDGear.Infrastructure;
 using RFiDGear.Infrastructure.ReaderProviders;
+using RFiDGear.UI.MVVMDialogs.ViewModels;
 using RFiDGear.UI.MVVMDialogs.ViewModels.Interfaces;
 using RFiDGear.UI.Selection.Interfaces;
 using System.Windows.Threading;
@@ -34,6 +35,7 @@ namespace RFiDGear.ViewModel
         private readonly RelayCommand _cmdReadSectorWithCustoms;
         private readonly AsyncRelayCommand _cmdReadSectorWithDefaults;
         private readonly RelayCommand _cmdEditAuthAndModifySector;
+        private readonly RelayCommand _cmdReadFilesWithKey;
         private readonly string _parentUid;
 
         //private MifareClassicSetupViewModel setupViewModel;
@@ -138,20 +140,14 @@ namespace RFiDGear.ViewModel
 
             _cmdReadSectorWithDefaults = new AsyncRelayCommand(ReadSectorWithDefaults);
             _cmdEditAuthAndModifySector = new RelayCommand(ReadSectorWithCustoms);
+            _cmdReadFilesWithKey = new RelayCommand(ReadFilesWithKey);
 
             InitializeContextMenuItems(new List<MenuItem>
             {
                 new MenuItem
                 {
-                    Header = "Read Sector using default Configuration",
-                    Command = null,
-                    Visibility = Visibility.Hidden
-                },
-                new MenuItem
-                {
-                    Header = "Edit Authentication Settings and Modify Sector",
-                    Command = null,
-                    Visibility = Visibility.Hidden
+                    Header = ResourceLoader.GetResource("contextMenuDesfireReadFilesWithKey"),
+                    Command = _cmdReadFilesWithKey
                 }
             });
 
@@ -288,6 +284,17 @@ namespace RFiDGear.ViewModel
         public void EditAccessBits()
         {
             IsSelected = true;
+        }
+
+        /// <summary>
+        /// Opens a small dialog to authenticate to THIS DESFire application with a user-supplied
+        /// key and read its file list - for applications where "Free Directory Listing without MK"
+        /// is disabled, so the quick check cannot show files without knowing the app's key.
+        /// </summary>
+        public void ReadFilesWithKey()
+        {
+            IsSelected = true;
+            dialogs.Add(new DesfireReadFilesDialogViewModel(this));
         }
 
         #endregion Context Menu Items
