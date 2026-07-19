@@ -34,6 +34,8 @@ namespace RFiDGear.Infrastructure.ReaderProviders
         private Chip card;
         public IReadOnlyCollection<string> AvailableReaders { get; private set; } = new List<string>();
 
+        // LastNativeErrorMessage (raw native exception text) is inherited directly from ReaderDevice;
+        // this provider just sets it in the catch blocks below when a native exception is caught.
 
         #region contructor
         public LibLogicalAccessProvider()
@@ -1650,18 +1652,35 @@ namespace RFiDGear.Infrastructure.ReaderProviders
                     keySettings);
 
                 // Build authentication key (either master key or target key depending on policy).
+                //
+                // IMPORTANT: resolved.AuthKeyHex/NewTargetKeyHex are already normalized to the spaced
+                // "00 11 22 ..." format by DesfireKeyChangeInputs.Resolve() (via NormalizeKeyHex). Do NOT
+                // run them through CustomConverter.FormatMifareDesfireKeyStringWithSpacesEachByte again:
+                // that method requires exactly 32 RAW (unspaced) hex characters, so it always fails its
+                // length check on an already-spaced 47-character string and returns early WITHOUT updating
+                // its shared static DesfireKeyToCheck property - silently leaving it at whatever value an
+                // unrelated earlier call (e.g. key-format validation elsewhere) last set it to. That bug is
+                // what caused authenticate()/changeKey() to sometimes silently use the wrong key value.
                 var authKey = new DESFireKey();
                 authKey.setKeyType((LibLogicalAccess.Card.DESFireKeyType)resolved.AuthKeyType);
-                CustomConverter.FormatMifareDesfireKeyStringWithSpacesEachByte(resolved.AuthKeyHex);
-                authKey.fromString(CustomConverter.DesfireKeyToCheck);
+                authKey.fromString(resolved.AuthKeyHex);
 
                 // Build new key to be written.
                 var newKey = new DESFireKey();
                 newKey.setKeyType((LibLogicalAccess.Card.DESFireKeyType)resolved.TargetKeyType);
-                CustomConverter.FormatMifareDesfireKeyStringWithSpacesEachByte(resolved.NewTargetKeyHex);
-                newKey.fromString(CustomConverter.DesfireKeyToCheck);
+                newKey.fromString(resolved.NewTargetKeyHex);
 
-                // Ensure a clean reader state before reconnecting.
+                // For AES keys on EV2/EV3 cards, authenticate() always routes through
+                // authenticateEV2First() internally (see LibLogicalAccess source:
+                // DESFireEV2ISO7816Commands::authenticate). Per the DESFire spec,
+                // AuthenticateEV2First is only valid ONCE per RF communication session - a second
+                // attempt in the same session is rejected by the card with status 0x91/0xAE
+                // ("Current authentication status does not allow the requested command"), and this
+                // library does not implement AuthenticateEV2NonFirst (which would be needed to
+                // re-authenticate within an existing session). CreateMifareDesfireApplication
+                // authenticates internally (authenticateToPICCFirst), consuming that session's one
+                // allowed EV2First call - so a genuine reader disconnect+reconnect (RF field
+                // power-cycle) is required here to start a fresh session before authenticating again.
                 readerUnit.disconnectFromReader();
 
                 if (!await tryInitReader())
@@ -1684,7 +1703,8 @@ namespace RFiDGear.Infrastructure.ReaderProviders
                     // Scope selection: appId==0 selects PICC; appId>0 selects that application.
                     cmd.selectApplication(resolved.AppId);
 
-                    // Authenticate with required key number (master key or target key).
+                    // Authenticate with required key number (master key or target key). This must be
+                    // the FIRST authenticate call since the reader disconnect/reconnect above.
                     cmd.authenticate(resolved.AuthKeyNo, authKey);
 
                     // Change the requested key number to the new value.
@@ -1694,15 +1714,20 @@ namespace RFiDGear.Infrastructure.ReaderProviders
                 }
                 catch (Exception e)
                 {
-                    // Keep your current mapping style but more focused.
+                    // Capture full diagnostic detail (type, message, stack trace) for LastNativeErrorMessage,
+                    // but only map the specific "not allowed in current auth state" card response to
+                    // AuthFailure; everything else is reported as a generic TransportError.
+                    LastNativeErrorMessage = e.ToString();
+
                     if (!string.IsNullOrEmpty(e.Message) && e.Message.Contains("status does not allow the requested command"))
                         return ERROR.AuthFailure;
 
                     return ERROR.TransportError;
                 }
             }
-            catch
+            catch (Exception e)
             {
+                LastNativeErrorMessage = e.Message;
                 return ERROR.TransportError;
             }
         }
@@ -2091,6 +2116,35 @@ namespace RFiDGear.Infrastructure.ReaderProviders
                             {
                                 try
                                 {
+                                    // A failed authenticate() attempt on an EV2/EV3 card can leave the
+                                    // one-per-RF-session AuthenticateEV2First slot "used up" even though
+                                    // it failed (see ChangeMifareDesfireKeyAsync for the same mechanism,
+                                    // confirmed against a real card). Left unaddressed, this doesn't just
+                                    // break the fallback read below - it can break every SUBSEQUENT command
+                                    // for the rest of this hydration pass (including auth-free ones like
+                                    // getKeySettings for later apps), because the card silently rejects
+                                    // them with "status does not allow the requested command" until a
+                                    // genuine RF field reset. Reset the connection here so a failed auth on
+                                    // one (foreign/unknown-key) app can't cascade into every app after it.
+                                    readerUnit.disconnectFromReader();
+
+                                    if (!await tryInitReader())
+                                    {
+                                        return ERROR.TransportError;
+                                    }
+
+                                    card = readerUnit.getSingleChip();
+                                    if (card == null)
+                                    {
+                                        return ERROR.TransportError;
+                                    }
+
+                                    cmd = card.getCommands() as DESFireCommands;
+                                    if (cmd == null)
+                                    {
+                                        return ERROR.TransportError;
+                                    }
+
                                     // A failed authenticate() attempt can leave the DESFire session
                                     // in a state where the next command needs a fresh
                                     // SelectApplication before it will succeed - reselect explicitly

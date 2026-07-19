@@ -14,6 +14,13 @@ namespace RFiDGear.Infrastructure.ReaderProviders
 {
     public abstract class ReaderDevice : IDisposable
     {
+        /// <summary>
+        /// Raw message of the last native reader/card exception, when the concrete provider captures one.
+        /// Null/empty by default; exists purely for diagnostic logging, since the public methods on this
+        /// class only return a coarse <see cref="ERROR"/> enum value.
+        /// </summary>
+        public string LastNativeErrorMessage { get; protected set; }
+
         public static ReaderDevice Instance
         {
             get
