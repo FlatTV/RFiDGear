@@ -1286,9 +1286,24 @@ namespace RFiDGear.Infrastructure.ReaderProviders
             try
             {
                 DESFireAccessInfo aiToUse = new DESFireAccessInfo();
-                CustomConverter.FormatMifareDesfireKeyStringWithSpacesEachByte(_applicationMasterKey);
-                aiToUse.masterCardKey.fromString(CustomConverter.DesfireKeyToCheck);
+                // Build directly from the normalized hex instead of going through
+                // CustomConverter.FormatMifareDesfireKeyStringWithSpacesEachByte: that formatter only
+                // accepts exactly 32 raw hex characters, so it silently fails (leaving its shared
+                // static DesfireKeyToCheck stale) for DES (16 chars) or 3K3DES (48 chars) keys - the
+                // same bug found and fixed in ChangeMifareDesfireKeyAsync.
+                aiToUse.masterCardKey.fromString(DesfireKeyChangeInputs.NormalizeKeyHex(_applicationMasterKey));
                 aiToUse.masterCardKey.setKeyType((LibLogicalAccess.Card.DESFireKeyType)_keyType);
+
+                if (authenticateBeforeReading)
+                {
+                    // Force a genuine reader disconnect/reconnect before authenticating - same reasoning
+                    // as ChangeMifareDesfireKeyAsync: on EV2/EV3 cards, AuthenticateEV2First is only
+                    // valid once per RF session, and tryInitReader() alone reuses an existing connection
+                    // rather than resetting it. Without this, authenticating here right after another
+                    // successful authenticate() in the same connection (e.g. from a file-list read just
+                    // before this call) fails with "status does not allow the requested command".
+                    readerUnit.disconnectFromReader();
+                }
 
                 if (!await tryInitReader())
                 {

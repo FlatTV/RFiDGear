@@ -42,7 +42,22 @@
             VerticalAlignment="Center"
             HorizontalAlignment="Stretch"
             VerticalContentAlignment="Center"
-            Text="{Binding AppKey, UpdateSourceTrigger=PropertyChanged, Mode=TwoWay}" />
+            Text="{Binding AppKey, UpdateSourceTrigger=PropertyChanged, Mode=TwoWay}">
+            <TextBox.Resources>
+                <Style TargetType="TextBox">
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding IsValidAppKey}" Value="True">
+                            <Setter Property="Foreground" Value="Green" />
+                            <Setter Property="Background" Value="White" />
+                        </DataTrigger>
+                        <DataTrigger Binding="{Binding IsValidAppKey}" Value="False">
+                            <Setter Property="Foreground" Value="Black" />
+                            <Setter Property="Background" Value="Red" />
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </TextBox.Resources>
+        </TextBox>
 
         <Label
             Grid.Row="1"
