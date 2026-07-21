@@ -1159,8 +1159,10 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
             get => selectedDesfireMasterKeyEncryptionTypeCurrent;
             set
             {
+                var previousType = selectedDesfireMasterKeyEncryptionTypeCurrent;
                 selectedDesfireMasterKeyEncryptionTypeCurrent = value;
                 OnPropertyChanged(nameof(SelectedDesfireMasterKeyEncryptionTypeCurrent));
+                DesfireMasterKeyCurrent = AdjustDefaultKeyForTypeChange(DesfireMasterKeyCurrent, previousType, value);
             }
         }
         private DESFireKeyType selectedDesfireMasterKeyEncryptionTypeCurrent;
@@ -1173,8 +1175,8 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
             get => desfireMasterKeyCurrent;
             set
             {
-                desfireMasterKeyCurrent = NormalizeDesfireKeyInput(value);
-                IsValidDesfireMasterKeyCurrent = (CustomConverter.IsInHexFormat(desfireMasterKeyCurrent) && desfireMasterKeyCurrent.Length == 32);
+                desfireMasterKeyCurrent = NormalizeDesfireKeyInput(value, GetExpectedKeyHexLength(SelectedDesfireMasterKeyEncryptionTypeCurrent));
+                IsValidDesfireMasterKeyCurrent = (CustomConverter.IsInHexFormat(desfireMasterKeyCurrent) && desfireMasterKeyCurrent.Length == GetExpectedKeyHexLength(SelectedDesfireMasterKeyEncryptionTypeCurrent));
                 OnPropertyChanged(nameof(DesfireMasterKeyCurrent));
             }
         }
@@ -1203,8 +1205,10 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
             get => selectedDesfireMasterKeyEncryptionTypeTarget;
             set
             {
+                var previousType = selectedDesfireMasterKeyEncryptionTypeTarget;
                 selectedDesfireMasterKeyEncryptionTypeTarget = value;
                 OnPropertyChanged(nameof(SelectedDesfireMasterKeyEncryptionTypeCurrent));
+                DesfireMasterKeyTarget = AdjustDefaultKeyForTypeChange(DesfireMasterKeyTarget, previousType, value);
             }
         }
         private DESFireKeyType selectedDesfireMasterKeyEncryptionTypeTarget;
@@ -1217,11 +1221,11 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
             get => desfireMasterKeyTarget;
             set
             {
-                desfireMasterKeyTarget = NormalizeDesfireKeyInput(value);
+                desfireMasterKeyTarget = NormalizeDesfireKeyInput(value, GetExpectedKeyHexLength(SelectedDesfireMasterKeyEncryptionTypeTarget));
 
                 IsValidDesfireMasterKeyTarget = (
                     CustomConverter.IsInHexFormat(desfireMasterKeyTarget) &&
-                    desfireMasterKeyTarget.Length == 32);
+                    desfireMasterKeyTarget.Length == GetExpectedKeyHexLength(SelectedDesfireMasterKeyEncryptionTypeTarget));
                 OnPropertyChanged(nameof(DesfireMasterKeyTarget));
             }
         }
@@ -1421,6 +1425,48 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
         }
 
         /// <summary>
+        /// Expected hex-character length for a DESFire key of the given type
+        /// (DES: 8 bytes/16 chars, 3K3DES: 24 bytes/48 chars, AES: 16 bytes/32 chars).
+        /// </summary>
+        private static int GetExpectedKeyHexLength(DESFireKeyType keyType)
+        {
+            switch (keyType)
+            {
+                case DESFireKeyType.DF_KEY_DES:
+                    return 16;
+
+                case DESFireKeyType.DF_KEY_3K3DES:
+                    return 48;
+
+                case DESFireKeyType.DF_KEY_AES:
+                default:
+                    return 32;
+            }
+        }
+
+        /// <summary>
+        /// If <paramref name="currentValue"/> is still just the all-zero default for
+        /// <paramref name="previousType"/> (i.e. the user hasn't typed a real key yet), returns a
+        /// fresh all-zero default sized for <paramref name="newType"/> instead; otherwise returns
+        /// <paramref name="currentValue"/> unchanged so a real, user-entered key is never touched.
+        /// </summary>
+        private static string AdjustDefaultKeyForTypeChange(string currentValue, DESFireKeyType previousType, DESFireKeyType newType)
+        {
+            if (string.IsNullOrEmpty(currentValue))
+            {
+                return currentValue;
+            }
+
+            var previousExpectedLength = GetExpectedKeyHexLength(previousType);
+            if (currentValue.Length == previousExpectedLength && currentValue.All(c => c == '0'))
+            {
+                return new string('0', GetExpectedKeyHexLength(newType));
+            }
+
+            return currentValue;
+        }
+
+        /// <summary>
         ///
         /// </summary>
         public bool IsAllowChangeMKChecked
@@ -1488,8 +1534,10 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
             get => selectedDesfireAppKeyEncryptionTypeCurrent;
             set
             {
+                var previousType = selectedDesfireAppKeyEncryptionTypeCurrent;
                 selectedDesfireAppKeyEncryptionTypeCurrent = value;
                 OnPropertyChanged(nameof(SelectedDesfireAppKeyEncryptionTypeCurrent));
+                DesfireAppKeyCurrent = AdjustDefaultKeyForTypeChange(DesfireAppKeyCurrent, previousType, value);
             }
         }
         private DESFireKeyType selectedDesfireAppKeyEncryptionTypeCurrent;
@@ -1523,8 +1571,8 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
             get => desfireAppKeyCurrent;
             set
             {
-                desfireAppKeyCurrent = NormalizeDesfireKeyInput(value);
-                IsValidDesfireAppKeyCurrent = (CustomConverter.IsInHexFormat(desfireAppKeyCurrent) && desfireAppKeyCurrent.Length == 32);
+                desfireAppKeyCurrent = NormalizeDesfireKeyInput(value, GetExpectedKeyHexLength(SelectedDesfireAppKeyEncryptionTypeCurrent));
+                IsValidDesfireAppKeyCurrent = (CustomConverter.IsInHexFormat(desfireAppKeyCurrent) && desfireAppKeyCurrent.Length == GetExpectedKeyHexLength(SelectedDesfireAppKeyEncryptionTypeCurrent));
                 OnPropertyChanged(nameof(DesfireAppKeyCurrent));
 
                 UpdateOldAppKeyDefaults();
@@ -1555,8 +1603,8 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
             get => desfireAppKeyCurrentOld;
             set
             {
-                desfireAppKeyCurrentOld = NormalizeDesfireKeyInput(value);
-                IsValidDesfireAppKeyCurrentOld = (CustomConverter.IsInHexFormat(desfireAppKeyCurrentOld) && desfireAppKeyCurrentOld.Length == 32);
+                desfireAppKeyCurrentOld = NormalizeDesfireKeyInput(value, GetExpectedKeyHexLength(SelectedDesfireAppKeyEncryptionTypeCurrent));
+                IsValidDesfireAppKeyCurrentOld = (CustomConverter.IsInHexFormat(desfireAppKeyCurrentOld) && desfireAppKeyCurrentOld.Length == GetExpectedKeyHexLength(SelectedDesfireAppKeyEncryptionTypeCurrent));
                 OnPropertyChanged(nameof(DesfireAppKeyCurrentOld));
             }
         }
@@ -1643,8 +1691,10 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
             get => selectedDesfireAppKeyEncryptionTypeTarget;
             set
             {
+                var previousType = selectedDesfireAppKeyEncryptionTypeTarget;
                 selectedDesfireAppKeyEncryptionTypeTarget = value;
                 OnPropertyChanged(nameof(SelectedDesfireAppKeyEncryptionTypeTarget));
+                DesfireAppKeyTarget = AdjustDefaultKeyForTypeChange(DesfireAppKeyTarget, previousType, value);
             }
         }
         private DESFireKeyType selectedDesfireAppKeyEncryptionTypeTarget;
@@ -1699,11 +1749,11 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
             get => desfireAppKeyTarget;
             set
             {
-                desfireAppKeyTarget = NormalizeDesfireKeyInput(value);
+                desfireAppKeyTarget = NormalizeDesfireKeyInput(value, GetExpectedKeyHexLength(SelectedDesfireAppKeyEncryptionTypeTarget));
 
                 IsValidDesfireAppKeyTarget = (
                     CustomConverter.IsInHexFormat(desfireAppKeyTarget) &&
-                    desfireAppKeyTarget.Length == 32);
+                    desfireAppKeyTarget.Length == GetExpectedKeyHexLength(SelectedDesfireAppKeyEncryptionTypeTarget));
                 OnPropertyChanged(nameof(DesfireAppKeyTarget));
             }
         }
@@ -2053,11 +2103,11 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
             get => desfireReadKeyCurrent;
             set
             {
-                desfireReadKeyCurrent = NormalizeDesfireKeyInput(value);
+                desfireReadKeyCurrent = NormalizeDesfireKeyInput(value, GetExpectedKeyHexLength(SelectedDesfireReadKeyEncryptionType));
 
                 IsValidDesfireReadKeyCurrent = (
                     CustomConverter.IsInHexFormat(desfireReadKeyCurrent) &&
-                    desfireReadKeyCurrent.Length == 32);
+                    desfireReadKeyCurrent.Length == GetExpectedKeyHexLength(SelectedDesfireReadKeyEncryptionType));
 
                 OnPropertyChanged(nameof(DesfireReadKeyCurrent));
             }
@@ -2105,11 +2155,11 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
             get => desfireWriteKeyCurrent;
             set
             {
-                desfireWriteKeyCurrent = NormalizeDesfireKeyInput(value);
+                desfireWriteKeyCurrent = NormalizeDesfireKeyInput(value, GetExpectedKeyHexLength(SelectedDesfireWriteKeyEncryptionType));
 
                 IsValidDesfireWriteKeyCurrent = (
                     CustomConverter.IsInHexFormat(desfireWriteKeyCurrent) &&
-                    desfireWriteKeyCurrent.Length == 32);
+                    desfireWriteKeyCurrent.Length == GetExpectedKeyHexLength(SelectedDesfireWriteKeyEncryptionType));
 
                 OnPropertyChanged(nameof(DesfireWriteKeyCurrent));
             }
@@ -2157,8 +2207,10 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
             get => selectedDesfireReadKeyEncryptionType;
             set
             {
+                var previousType = selectedDesfireReadKeyEncryptionType;
                 selectedDesfireReadKeyEncryptionType = value;
                 OnPropertyChanged(nameof(SelectedDesfireReadKeyEncryptionType));
+                DesfireReadKeyCurrent = AdjustDefaultKeyForTypeChange(DesfireReadKeyCurrent, previousType, value);
             }
         }
         private DESFireKeyType selectedDesfireReadKeyEncryptionType;
@@ -2171,8 +2223,10 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
             get => selectedDesfireWriteKeyEncryptionType;
             set
             {
+                var previousType = selectedDesfireWriteKeyEncryptionType;
                 selectedDesfireWriteKeyEncryptionType = value;
                 OnPropertyChanged(nameof(SelectedDesfireWriteKeyEncryptionType));
+                DesfireWriteKeyCurrent = AdjustDefaultKeyForTypeChange(DesfireWriteKeyCurrent, previousType, value);
             }
         }
         private DESFireKeyType selectedDesfireWriteKeyEncryptionType;

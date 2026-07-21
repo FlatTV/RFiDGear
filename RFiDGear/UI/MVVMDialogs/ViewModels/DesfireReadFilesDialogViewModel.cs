@@ -13,6 +13,7 @@ using System;
 using System.Collections.ObjectModel;
 using System.Globalization;
 using System.Linq;
+using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Input;
 
@@ -103,7 +104,7 @@ namespace RFiDGear.UI.MVVMDialogs.ViewModels
             get => appKey;
             set
             {
-                appKey = value;
+                appKey = NormalizeDesfireKeyInput(value, GetExpectedKeyHexLength(SelectedKeyType));
                 OnPropertyChanged(nameof(AppKey));
                 RevalidateAppKey();
             }
@@ -135,6 +136,31 @@ namespace RFiDGear.UI.MVVMDialogs.ViewModels
             }
 
             IsValidAppKey = CustomConverter.IsInHexFormat(AppKey) && AppKey.Length == GetExpectedKeyHexLength(SelectedKeyType);
+        }
+
+        /// <summary>
+        /// Strips anything that isn't a hex digit (including whitespace, e.g. pasted "00 11 22..."),
+        /// uppercases, and truncates to <paramref name="maxLength"/> - same normalization used
+        /// throughout MifareDesfireSetupViewModel's key fields.
+        /// </summary>
+        private static string NormalizeDesfireKeyInput(string value, int maxLength)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return string.Empty;
+            }
+
+            var builder = new StringBuilder(value.Length);
+            foreach (var character in value)
+            {
+                if (Uri.IsHexDigit(character))
+                {
+                    builder.Append(char.ToUpperInvariant(character));
+                }
+            }
+
+            var normalized = builder.ToString();
+            return normalized.Length > maxLength ? normalized.Substring(0, maxLength) : normalized;
         }
 
         private static int GetExpectedKeyHexLength(DESFireKeyType keyType)
