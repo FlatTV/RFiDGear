@@ -123,7 +123,21 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
                     editedTaskReference = _selectedSetupViewModel;
                     var properties = typeof(MifareDesfireSetupViewModel).GetProperties(BindingFlags.Public | BindingFlags.Instance);
 
-                    foreach (var p in properties.Where(x => x.PropertyType != items.GetType()))
+                    // Copy DESFireKeyType properties FIRST: GetProperties() enumeration order is not
+                    // guaranteed to match declaration order, so without this, a key VALUE property can
+                    // get copied before its paired TYPE property - at that point the type is still at
+                    // its un-set default (DF_KEY_DES, 16 chars), so a 32-char AES value gets silently
+                    // truncated to 16 chars by the value setter's normalization, and the later-copied
+                    // (correct) type then no longer matches the now-truncated value.
+                    foreach (var p in properties.Where(x => x.PropertyType == typeof(DESFireKeyType)))
+                    {
+                        if (!p.CanWrite || !p.CanRead) { continue; }
+                        if (p.GetGetMethod(false) == null || p.GetSetMethod(false) == null) { continue; }
+
+                        p.SetValue(this, p.GetValue(_selectedSetupViewModel));
+                    }
+
+                    foreach (var p in properties.Where(x => x.PropertyType != items.GetType() && x.PropertyType != typeof(DESFireKeyType)))
                     {
                         // If not writable then cannot null it; if not readable then cannot check it's value
                         if (!p.CanWrite || !p.CanRead) { continue; }
@@ -142,27 +156,31 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
                 else
                 {
                     editedTaskReference = null;
-                    SelectedDesfireMasterKeyEncryptionTypeCurrent = settings.DefaultSpecification.MifareDesfireDefaultSecuritySettings.First(x => x.KeyType == KeyType_MifareDesFireKeyType.DefaultDesfireCardCardMasterKey).EncryptionType;
+                    // Default all key types to AES consistently across every tab/task - the default key
+                    // VALUES from settings are uniformly 32 hex chars (AES length) regardless of role, so
+                    // this also keeps type and value length aligned from the start.
+                    SelectedDesfireAppKeyEncryptionTypeCreateNewApp = DESFireKeyType.DF_KEY_AES;
+                    SelectedDesfireMasterKeyEncryptionTypeCurrent = DESFireKeyType.DF_KEY_AES;
                     DesfireMasterKeyCurrent = settings.DefaultSpecification.MifareDesfireDefaultSecuritySettings.First(x => x.KeyType == KeyType_MifareDesFireKeyType.DefaultDesfireCardCardMasterKey).Key;
 
-                    SelectedDesfireMasterKeyEncryptionTypeTarget = settings.DefaultSpecification.MifareDesfireDefaultSecuritySettings.First(x => x.KeyType == KeyType_MifareDesFireKeyType.DefaultDesfireCardCardMasterKey).EncryptionType;
+                    SelectedDesfireMasterKeyEncryptionTypeTarget = DESFireKeyType.DF_KEY_AES;
                     DesfireMasterKeyTarget = settings.DefaultSpecification.MifareDesfireDefaultSecuritySettings.First(x => x.KeyType == KeyType_MifareDesFireKeyType.DefaultDesfireCardApplicationMasterKey).Key;
 
-                    SelectedDesfireAppKeyEncryptionTypeCurrent = settings.DefaultSpecification.MifareDesfireDefaultSecuritySettings.First(x => x.KeyType == KeyType_MifareDesFireKeyType.DefaultDesfireCardApplicationMasterKey).EncryptionType;
+                    SelectedDesfireAppKeyEncryptionTypeCurrent = DESFireKeyType.DF_KEY_AES;
                     DesfireAppKeyCurrent = settings.DefaultSpecification.MifareDesfireDefaultSecuritySettings.First(x => x.KeyType == KeyType_MifareDesFireKeyType.DefaultDesfireCardApplicationMasterKey).Key;
                     SelectedDesfireAppKeyNumberCurrent = "0";
 
                     DesfireAppKeyCurrentOld = DesfireAppKeyCurrent;
 
-                    SelectedDesfireAppKeyEncryptionTypeTarget = settings.DefaultSpecification.MifareDesfireDefaultSecuritySettings.First(x => x.KeyType == KeyType_MifareDesFireKeyType.DefaultDesfireCardApplicationMasterKey).EncryptionType;
+                    SelectedDesfireAppKeyEncryptionTypeTarget = DESFireKeyType.DF_KEY_AES;
                     DesfireAppKeyTarget = settings.DefaultSpecification.MifareDesfireDefaultSecuritySettings.First(x => x.KeyType == KeyType_MifareDesFireKeyType.DefaultDesfireCardApplicationMasterKey).Key;
 
 
-                    SelectedDesfireReadKeyEncryptionType = settings.DefaultSpecification.MifareDesfireDefaultSecuritySettings.First(x => x.KeyType == KeyType_MifareDesFireKeyType.DefaultDesfireCardReadKey).EncryptionType;
+                    SelectedDesfireReadKeyEncryptionType = DESFireKeyType.DF_KEY_AES;
                     DesfireReadKeyCurrent = settings.DefaultSpecification.MifareDesfireDefaultSecuritySettings.First(x => x.KeyType == KeyType_MifareDesFireKeyType.DefaultDesfireCardReadKey).Key;
                     SelectedDesfireReadKeyNumber = "1";
 
-                    SelectedDesfireWriteKeyEncryptionType = settings.DefaultSpecification.MifareDesfireDefaultSecuritySettings.First(x => x.KeyType == KeyType_MifareDesFireKeyType.DefaultDesfireCardWriteKey).EncryptionType;
+                    SelectedDesfireWriteKeyEncryptionType = DESFireKeyType.DF_KEY_AES;
                     DesfireWriteKeyCurrent = settings.DefaultSpecification.MifareDesfireDefaultSecuritySettings.First(x => x.KeyType == KeyType_MifareDesFireKeyType.DefaultDesfireCardWriteKey).Key;
                     SelectedDesfireWriteKeyNumber = "1";
 
@@ -1469,6 +1487,17 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
         }
 
         /// <summary>
+        /// Type-aware replacement for the old "FormatMifareDesfireKeyStringWithSpacesEachByte(key) ==
+        /// KEY_ERROR.NO_ERROR" gate checks used throughout the task execution methods below - those
+        /// hardcode exactly 32 hex characters regardless of key type, which silently blocked every
+        /// task whenever the paired key type was DES (16 chars) or 3K3DES (48 chars) instead of AES.
+        /// </summary>
+        private static bool IsValidDesfireKeyValue(string key, DESFireKeyType keyType)
+        {
+            return !string.IsNullOrEmpty(key) && CustomConverter.IsInHexFormat(key) && key.Length == GetExpectedKeyHexLength(keyType);
+        }
+
+        /// <summary>
         ///
         /// </summary>
         public bool IsAllowChangeMKChecked
@@ -1792,7 +1821,7 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
                 {
                     appNumberTarget = value.ToUpper();
                 }
-                IsValidAppNumberTarget = (int.TryParse(value, out appNumberTargetAsInt) && appNumberTargetAsInt <= (int)0xFFFFFF);
+                IsValidAppNumberTarget = TryParseDesfireAppId(value, out appNumberTargetAsInt);
                 OnPropertyChanged(nameof(AppNumberTarget));
             }
         }
@@ -2339,7 +2368,7 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
 
                     StatusText = string.Format("{0}: {1}\n", DateTime.Now, ResourceLoader.GetResource("textBoxStatusTextBoxDllLoaded"));
 
-                    if (CustomConverter.FormatMifareDesfireKeyStringWithSpacesEachByte(DesfireReadKeyCurrent) == KEY_ERROR.NO_ERROR)
+                    if (IsValidDesfireKeyValue(DesfireReadKeyCurrent, SelectedDesfireReadKeyEncryptionType))
                     {
                         if (IsValidAppNumberNew == false)
                         {
@@ -2462,7 +2491,7 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
 
                     StatusText = string.Format("{0}: {1}\n", DateTime.Now, ResourceLoader.GetResource("textBoxStatusTextBoxDllLoaded"));
 
-                    if (CustomConverter.FormatMifareDesfireKeyStringWithSpacesEachByte(DesfireAppKeyCurrent) == KEY_ERROR.NO_ERROR && IsValidAppNumberNew != false)
+                    if (IsValidDesfireKeyValue(DesfireAppKeyCurrent, SelectedDesfireAppKeyEncryptionTypeCurrent) && IsValidAppNumberNew != false)
                     {
                         var result = await device.AuthToMifareDesfireApplication(
                                 DesfireAppKeyCurrent,
@@ -2558,7 +2587,7 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
 
                     StatusText = string.Format("{0}: {1}\n", DateTime.Now, ResourceLoader.GetResource("textBoxStatusTextBoxDllLoaded"));
 
-                    if (CustomConverter.FormatMifareDesfireKeyStringWithSpacesEachByte(DesfireReadKeyCurrent) == KEY_ERROR.NO_ERROR)
+                    if (IsValidDesfireKeyValue(DesfireReadKeyCurrent, SelectedDesfireReadKeyEncryptionType))
                     {
                         var result = await device.AuthToMifareDesfireApplication(
                                 DesfireReadKeyCurrent,
@@ -2706,7 +2735,7 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
 
                     StatusText = string.Format("{0}: {1}\n", DateTime.Now, ResourceLoader.GetResource("textBoxStatusTextBoxDllLoaded"));
 
-                    if (CustomConverter.FormatMifareDesfireKeyStringWithSpacesEachByte(DesfireWriteKeyCurrent) == KEY_ERROR.NO_ERROR)
+                    if (IsValidDesfireKeyValue(DesfireWriteKeyCurrent, SelectedDesfireWriteKeyEncryptionType))
                     {
 
                         var result = await device.AuthToMifareDesfireApplication(
@@ -3210,7 +3239,7 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
 
                     StatusText = string.Format("{0}: {1}\n", DateTime.Now, ResourceLoader.GetResource("textBoxStatusTextBoxDllLoaded"));
 
-                    if (CustomConverter.FormatMifareDesfireKeyStringWithSpacesEachByte(DesfireAppKeyCurrent) == KEY_ERROR.NO_ERROR)
+                    if (IsValidDesfireKeyValue(DesfireAppKeyCurrent, SelectedDesfireAppKeyEncryptionTypeCurrent))
                     {
                         if (IsValidAppNumberCurrent == false)
                         {
@@ -3307,7 +3336,7 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
 
                     StatusText = string.Format("{0}: {1}\n", DateTime.Now, ResourceLoader.GetResource("textBoxStatusTextBoxDllLoaded"));
 
-                    if (CustomConverter.FormatMifareDesfireKeyStringWithSpacesEachByte(DesfireAppKeyCurrent) == KEY_ERROR.NO_ERROR)
+                    if (IsValidDesfireKeyValue(DesfireAppKeyCurrent, SelectedDesfireAppKeyEncryptionTypeCurrent))
                     {
                         var result = await device.AuthToMifareDesfireApplication(
                                 DesfireAppKeyCurrent,
@@ -3385,7 +3414,7 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
 
                     StatusText = string.Format("{0}: {1}\n", DateTime.Now, ResourceLoader.GetResource("textBoxStatusTextBoxDllLoaded"));
 
-                    if (CustomConverter.FormatMifareDesfireKeyStringWithSpacesEachByte(DesfireAppKeyCurrent) == KEY_ERROR.NO_ERROR)
+                    if (IsValidDesfireKeyValue(DesfireAppKeyCurrent, SelectedDesfireAppKeyEncryptionTypeCurrent))
                     {
                         var result = await device.AuthToMifareDesfireApplication(
                                 DesfireMasterKeyCurrent,
@@ -3492,7 +3521,7 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
 
                     StatusText = string.Format("{0}: {1}\n", DateTime.Now, ResourceLoader.GetResource("textBoxStatusTextBoxDllLoaded"));
 
-                    if (CustomConverter.FormatMifareDesfireKeyStringWithSpacesEachByte(DesfireAppKeyCurrent) == KEY_ERROR.NO_ERROR)
+                    if (IsValidDesfireKeyValue(DesfireAppKeyCurrent, SelectedDesfireAppKeyEncryptionTypeCurrent))
                     {
                         var result = await device.AuthToMifareDesfireApplication(
                                 DesfireAppKeyCurrent,
@@ -3538,7 +3567,7 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
 
                     StatusText = string.Format("{0}: {1}\n", DateTime.Now, ResourceLoader.GetResource("textBoxStatusTextBoxDllLoaded"));
 
-                    if (CustomConverter.FormatMifareDesfireKeyStringWithSpacesEachByte(DesfireMasterKeyCurrent) == KEY_ERROR.NO_ERROR)
+                    if (IsValidDesfireKeyValue(DesfireMasterKeyCurrent, SelectedDesfireMasterKeyEncryptionTypeCurrent))
                     {
                         var keySettings = GetPiccMasterKeyChangeSettings();
 
@@ -3632,7 +3661,7 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
 
                     StatusText = string.Format("{0}: {1}\n", DateTime.Now, ResourceLoader.GetResource("textBoxStatusTextBoxDllLoaded"));
 
-                    if (CustomConverter.FormatMifareDesfireKeyStringWithSpacesEachByte(DesfireMasterKeyCurrent) == KEY_ERROR.NO_ERROR)
+                    if (IsValidDesfireKeyValue(DesfireMasterKeyCurrent, SelectedDesfireMasterKeyEncryptionTypeCurrent))
                     {
                         var result = await device.AuthToMifareDesfireApplication(
                             DesfireMasterKeyCurrent,
@@ -3699,7 +3728,7 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
                 {
                     StatusText = string.Format("{0}: {1}\n", DateTime.Now, ResourceLoader.GetResource("textBoxStatusTextBoxDllLoaded"));
 
-                    if (CustomConverter.FormatMifareDesfireKeyStringWithSpacesEachByte(DesfireAppKeyCurrent) == KEY_ERROR.NO_ERROR)
+                    if (IsValidDesfireKeyValue(DesfireAppKeyCurrent, SelectedDesfireAppKeyEncryptionTypeCurrent))
                     {
                         var result = await device.GetMifareDesfireAppSettings(
                                 DesfireMasterKeyTarget,
@@ -3758,7 +3787,7 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
                 {
                     StatusText = string.Format("{0}: {1}\n", DateTime.Now, ResourceLoader.GetResource("textBoxStatusTextBoxDllLoaded"));
 
-                    if (CustomConverter.FormatMifareDesfireKeyStringWithSpacesEachByte(DesfireAppKeyCurrent) == KEY_ERROR.NO_ERROR)
+                    if (IsValidDesfireKeyValue(DesfireAppKeyCurrent, SelectedDesfireAppKeyEncryptionTypeCurrent))
                     {
                         var result = await device.GetMiFareDESFireChipAppIDs(
                                 DesfireAppKeyCurrent,

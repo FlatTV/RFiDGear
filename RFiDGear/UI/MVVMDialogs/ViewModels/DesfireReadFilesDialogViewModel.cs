@@ -39,7 +39,7 @@ namespace RFiDGear.UI.MVVMDialogs.ViewModels
             IsModal = isModal;
             appNode = _appNode;
 
-            SelectedKeyType = DESFireKeyType.DF_KEY_DES;
+            SelectedKeyType = DESFireKeyType.DF_KEY_AES;
             AppKey = new string('0', GetExpectedKeyHexLength(SelectedKeyType));
             SelectedKeyNumber = "0";
             KeyNumbers = CustomConverter.GenerateStringSequence(0, 16).ToArray();

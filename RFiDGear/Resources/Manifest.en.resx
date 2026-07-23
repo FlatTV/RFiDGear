@@ -1723,4 +1723,7 @@ https://github.com/c3rebro/rfidgear</value>
   <data name="statusDesfireReadFilesSuccess" xml:space="preserve">
     <value>Successfully read {0} file(s).</value>
   </data>
+  <data name="tooltipAppIdHexInput" xml:space="preserve">
+    <value>Decimal (e.g. 5) or hex with 0x prefix (e.g. 0x000005), range 0x000000 to 0xFFFFFF</value>
+  </data>
 </root>

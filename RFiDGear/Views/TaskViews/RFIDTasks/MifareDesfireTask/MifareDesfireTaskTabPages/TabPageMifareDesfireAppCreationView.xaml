@@ -220,7 +220,8 @@
                         HorizontalAlignment="Stretch"
                         VerticalContentAlignment="Center"
                         HorizontalContentAlignment="Left"
-                        Text="{Binding AppNumberNew, UpdateSourceTrigger=PropertyChanged, Mode=TwoWay}" Cursor="IBeam">
+                        Text="{Binding AppNumberNew, UpdateSourceTrigger=PropertyChanged, Mode=TwoWay}" Cursor="IBeam"
+                        ToolTip="{Binding LocalizationResourceSet, Converter={StaticResource Localization}, ConverterParameter='tooltipAppIdHexInput'}">
                         <TextBox.Resources>
                             <Style TargetType="TextBox">
                                 <Style.Triggers>
