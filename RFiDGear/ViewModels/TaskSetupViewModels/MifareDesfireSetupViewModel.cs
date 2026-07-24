@@ -2127,6 +2127,38 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
         }
 
         /// <summary>
+        /// 
+        /// </summary>
+        public DESFireKeyType SelectedDesfireReadKeyEncryptionType
+        {
+            get => selectedDesfireReadKeyEncryptionType;
+            set
+            {
+                var previousType = selectedDesfireReadKeyEncryptionType;
+                selectedDesfireReadKeyEncryptionType = value;
+                OnPropertyChanged(nameof(SelectedDesfireReadKeyEncryptionType));
+                DesfireReadKeyCurrent = AdjustDefaultKeyForTypeChange(DesfireReadKeyCurrent, previousType, value);
+            }
+        }
+        private DESFireKeyType selectedDesfireReadKeyEncryptionType;
+
+        /// <summary>
+        /// 
+        /// </summary>
+        public DESFireKeyType SelectedDesfireWriteKeyEncryptionType
+        {
+            get => selectedDesfireWriteKeyEncryptionType;
+            set
+            {
+                var previousType = selectedDesfireWriteKeyEncryptionType;
+                selectedDesfireWriteKeyEncryptionType = value;
+                OnPropertyChanged(nameof(SelectedDesfireWriteKeyEncryptionType));
+                DesfireWriteKeyCurrent = AdjustDefaultKeyForTypeChange(DesfireWriteKeyCurrent, previousType, value);
+            }
+        }
+        private DESFireKeyType selectedDesfireWriteKeyEncryptionType;
+
+        /// <summary>
         ///
         /// </summary>
         public string DesfireReadKeyCurrent
@@ -2229,38 +2261,6 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
             }
         }
         private bool? isValidDesfireWriteKeyCurrent;
-
-        /// <summary>
-        /// 
-        /// </summary>
-        public DESFireKeyType SelectedDesfireReadKeyEncryptionType
-        {
-            get => selectedDesfireReadKeyEncryptionType;
-            set
-            {
-                var previousType = selectedDesfireReadKeyEncryptionType;
-                selectedDesfireReadKeyEncryptionType = value;
-                OnPropertyChanged(nameof(SelectedDesfireReadKeyEncryptionType));
-                DesfireReadKeyCurrent = AdjustDefaultKeyForTypeChange(DesfireReadKeyCurrent, previousType, value);
-            }
-        }
-        private DESFireKeyType selectedDesfireReadKeyEncryptionType;
-
-        /// <summary>
-        /// 
-        /// </summary>
-        public DESFireKeyType SelectedDesfireWriteKeyEncryptionType
-        {
-            get => selectedDesfireWriteKeyEncryptionType;
-            set
-            {
-                var previousType = selectedDesfireWriteKeyEncryptionType;
-                selectedDesfireWriteKeyEncryptionType = value;
-                OnPropertyChanged(nameof(SelectedDesfireWriteKeyEncryptionType));
-                DesfireWriteKeyCurrent = AdjustDefaultKeyForTypeChange(DesfireWriteKeyCurrent, previousType, value);
-            }
-        }
-        private DESFireKeyType selectedDesfireWriteKeyEncryptionType;
 
         #endregion
 
