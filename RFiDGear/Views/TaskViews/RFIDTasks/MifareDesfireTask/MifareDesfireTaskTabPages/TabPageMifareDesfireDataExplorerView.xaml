@@ -381,19 +381,15 @@
                     Margin="0,0,0,0"
                     HorizontalAlignment="Stretch"
                     VerticalAlignment="Stretch">
-                    <Grid
+                    <UniformGrid
                         Grid.Row="8"
                         Grid.Column="0"
                         Grid.ColumnSpan="5"
+                        Columns="2"
                         Margin="8,0,7,7"
                         HorizontalAlignment="Stretch"
                         VerticalAlignment="Bottom">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="*" />
-                        </Grid.ColumnDefinitions>
                         <Button
-                            Grid.Column="0"
                             Height="26"
                             Margin="0,0,4,0"
                             Padding="5,2"
@@ -402,7 +398,6 @@
                             Command="{Binding WriteDataCommand}"
                             Content="{Binding LocalizationResourceSet, Converter={StaticResource Localization}, ConverterParameter='buttonContentMifareDesfireFileSetupWriteData'}" />
                         <Button
-                            Grid.Column="1"
                             Height="26"
                             Margin="4,0,0,0"
                             Padding="5,2"
@@ -410,7 +405,7 @@
                             VerticalAlignment="Bottom"
                             Command="{Binding ReadDataCommand}"
                             Content="{Binding LocalizationResourceSet, Converter={StaticResource Localization}, ConverterParameter='buttonContentMifareDesfireFileSetupReadData'}" />
-                    </Grid>
+                    </UniformGrid>
                     <TextBox
                         Grid.Row="0"
                         Grid.Column="1"
@@ -633,6 +628,31 @@
                         VerticalAlignment="Center"
                         Content="{Binding LocalizationResourceSet, Converter={StaticResource Localization}, ConverterParameter='checkBoxContentMifareDesfireFileSetupRefreshDataFromFile'}"
                         IsChecked="{Binding RefreshDesfireDataFromFileBeforeWrite, UpdateSourceTrigger=PropertyChanged, Mode=TwoWay}" />
+                    <Button
+                        Grid.Row="9"
+                        Grid.Column="0"
+                        Grid.ColumnSpan="2"
+                        Height="26"
+                        Margin="8,4,7,7"
+                        HorizontalAlignment="Stretch"
+                        VerticalAlignment="Bottom"
+                        Command="{Binding ResetDataFileLineIndexCommand}"
+                        Content="{Binding LocalizationResourceSet, Converter={StaticResource Localization}, ConverterParameter='buttonContentMifareDesfireFileSetupResetDataFileLineIndex'}" />
+                    <CheckBox
+                        Grid.Row="9"
+                        Grid.Column="2"
+                        Grid.ColumnSpan="3"
+                        Margin="8,4,8,7"
+                        HorizontalAlignment="Left"
+                        VerticalAlignment="Center">
+                        <CheckBox.IsChecked>
+                            <Binding Mode="TwoWay" Path="UseNextDataFileLinePerRun" UpdateSourceTrigger="PropertyChanged" />
+                        </CheckBox.IsChecked>
+                        <TextBlock
+                            MaxWidth="260"
+                            Text="{Binding LocalizationResourceSet, Converter={StaticResource Localization}, ConverterParameter='checkBoxContentMifareDesfireFileSetupUseNextLinePerRun'}"
+                            TextWrapping="Wrap" />
+                    </CheckBox>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="auto" />
                         <ColumnDefinition Width="auto" />
@@ -647,6 +667,7 @@
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />

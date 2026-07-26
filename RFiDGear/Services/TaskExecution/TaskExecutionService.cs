@@ -1063,6 +1063,30 @@ namespace RFiDGear.Services.TaskExecution
         private async Task<bool> HandleDesfireTaskAsync(MifareDesfireSetupViewModel desfireTask, TaskExecutionRequest request, IReadOnlyList<TaskDescriptor> descriptors)
         {
             var executed = false;
+
+            // The task's own Dialogs collection is only bound to a visible Window while its
+            // "Aufgabe erstellen / bearbeiten" editor happens to be open. During automatic /
+            // batch execution that editor is closed, so any dialog added to it (e.g. the
+            // "Daten xxx werden geschrieben" write confirmation) would never actually be shown
+            // and would silently resolve as "cancelled". Point it at the request's Dialogs
+            // collection instead, which stays attached to the main window for the whole run.
+            if (request.Dialogs != null)
+            {
+                desfireTask.ExternalDialogs = request.Dialogs;
+            }
+
+            // "Daten schreiben" with the per-run line confirmation popup can block for an
+            // arbitrary amount of time waiting on the user. Without this, taskTimeout keeps
+            // running underneath the modal popup and fires while the user is still reading it,
+            // marking the task failed (red X) even though the write itself goes on to succeed
+            // once they click Ok. Let the task suspend/resume the watchdog around the popup.
+            desfireTask.SuspendExecutionWatchdog = () => taskTimeout.Stop();
+            desfireTask.ResumeExecutionWatchdog = () =>
+            {
+                taskTimeout.Start();
+                taskTimeout.IsEnabled = true;
+            };
+
             switch ((request.TaskHandler.TaskCollection[CurrentTaskIndex] as IGenericTask).CurrentTaskErrorLevel)
             {
                 case ERROR.TransportError:

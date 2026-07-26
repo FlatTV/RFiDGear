@@ -865,6 +865,15 @@ Wird benötigt von:
   <data name="checkBoxContentMifareDesfireFileSetupRefreshDataFromFile" xml:space="preserve">
     <value>Vor Schreiben neu laden</value>
   </data>
+  <data name="checkBoxContentMifareDesfireFileSetupUseNextLinePerRun" xml:space="preserve">
+    <value>Je Durchlauf nächste Zeile aus Datei</value>
+  </data>
+  <data name="buttonContentMifareDesfireFileSetupResetDataFileLineIndex" xml:space="preserve">
+    <value>Zeilenzähler zurücksetzen</value>
+  </data>
+  <data name="messageBoxTextConfirmWriteDataFileLine" xml:space="preserve">
+    <value>Daten {0} werden geschrieben</value>
+  </data>
   <data name="buttonContentMifareDesfireFileSetupReadData" xml:space="preserve">
     <value>Datei lesen</value>
   </data>

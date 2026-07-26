@@ -45,6 +45,8 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
         private readonly object editedTaskReference; // Tracks the original task instance during edit mode.
         private bool hasFinalizedTask;
         private string desfireDataFilePath;
+        private int desfireDataFileLineIndex;
+        private bool useNextDataFileLinePerRun;
         private bool refreshDesfireDataFromFileBeforeWrite;
         private string desfireReadDataFilePath;
         private bool overwriteReadDataFileOnRead;
@@ -240,6 +242,30 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
         [XmlIgnore]
         public ObservableCollection<IDialogViewModel> Dialogs => dialogs;
         private readonly ObservableCollection<IDialogViewModel> dialogs = new ObservableCollection<IDialogViewModel>();
+
+        /// <summary>
+        /// Optional dialog surface set by <see cref="Services.TaskExecution.TaskExecutionService"/> before
+        /// running this task automatically (e.g. via "Markierte Aufgabe automatisch wiederholen"). The
+        /// task's own <see cref="Dialogs"/> collection is only bound to a visible window while its editor
+        /// is open, so confirmation popups shown during unattended execution must use this instead.
+        /// </summary>
+        [XmlIgnore]
+        public ObservableCollection<IDialogViewModel> ExternalDialogs { get; set; }
+
+        /// <summary>
+        /// Optionally set by <see cref="Services.TaskExecution.TaskExecutionService"/> before running
+        /// this task automatically. Called around the write confirmation popup so the task-timeout
+        /// watchdog doesn't fire (and mark the task failed) merely because the user took a while to
+        /// respond to the popup.
+        /// </summary>
+        [XmlIgnore]
+        public Action SuspendExecutionWatchdog { get; set; }
+
+        /// <summary>
+        /// Counterpart to <see cref="SuspendExecutionWatchdog"/>, called once the popup is dismissed.
+        /// </summary>
+        [XmlIgnore]
+        public Action ResumeExecutionWatchdog { get; set; }
         #region Plugins
 
         /// <summary>
@@ -2101,6 +2127,58 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
         }
 
         /// <summary>
+        /// When enabled, every execution of the "Daten schreiben" task consumes the next line
+        /// of <see cref="DesfireDataFilePath"/> instead of reloading the whole file. Intended for
+        /// use together with "Markierte Aufgabe automatisch wiederholen" so that each card written
+        /// during the automatic loop receives its own line of data.
+        /// </summary>
+        public bool UseNextDataFileLinePerRun
+        {
+            get => useNextDataFileLinePerRun;
+            set
+            {
+                useNextDataFileLinePerRun = value;
+                OnPropertyChanged(nameof(UseNextDataFileLinePerRun));
+
+                // NOTE: deliberately no automatic file/line reload here. This setter also runs
+                // during project deserialization and when the task editor copies an existing
+                // task's properties via reflection (see the ctor taking _selectedSetupViewModel) -
+                // neither is a real user interaction, so triggering a file read here caused the
+                // "Daten - SOLL" preview to be (re-)loaded silently every time a saved task was
+                // opened. The preview is refreshed explicitly instead: when the user opens a data
+                // file, resets the line counter, or after a successful write.
+            }
+        }
+
+        /// <summary>
+        /// Zero-based index of the next line to consume from <see cref="DesfireDataFilePath"/>
+        /// when <see cref="UseNextDataFileLinePerRun"/> is enabled.
+        /// </summary>
+        public int DesfireDataFileLineIndex
+        {
+            get => desfireDataFileLineIndex;
+            set
+            {
+                desfireDataFileLineIndex = value;
+                OnPropertyChanged(nameof(DesfireDataFileLineIndex));
+            }
+        }
+
+        /// <summary>
+        /// Resets the line cursor used by <see cref="UseNextDataFileLinePerRun"/> back to the
+        /// beginning of the file.
+        /// </summary>
+        public ICommand ResetDataFileLineIndexCommand => new RelayCommand(() =>
+        {
+            DesfireDataFileLineIndex = 0;
+
+            if (UseNextDataFileLinePerRun && !string.IsNullOrWhiteSpace(DesfireDataFilePath))
+            {
+                RefreshDesfireDataFilePreview();
+            }
+        });
+
+        /// <summary>
         /// Stores the target file path used to save read DESFire data.
         /// </summary>
         public string DesfireReadDataFilePath
@@ -2663,20 +2741,46 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
             {
                 try
                 {
-                    if (TryLoadDesfireDataFromFile(dlg.FileName, out var bytes, out var errorMessage))
-                    {
-                        DesfireDataFilePath = dlg.FileName;
-                        ApplyDesfireFileData(bytes);
-                        StatusText += string.Format("{0}: Loaded {1} bytes from {2}\n", DateTime.Now, bytes.Length, Path.GetFileName(dlg.FileName));
-                    }
-                    else
-                    {
-                        StatusText += string.Format("{0}: Unable to load data file: {1}\n", DateTime.Now, errorMessage);
-                    }
+                    DesfireDataFilePath = dlg.FileName;
+                    DesfireDataFileLineIndex = 0;
+                    RefreshDesfireDataFilePreview();
                 }
                 catch (Exception e)
                 {
                     Log.ForContext<MifareDesfireSetupViewModel>().Error(e, "Mifare DESFire setup operation failed.");
+                }
+            }
+        }
+
+        /// <summary>
+        /// Loads either the whole configured data file, or just the line that the next
+        /// "Daten schreiben" execution would consume (when <see cref="UseNextDataFileLinePerRun"/>
+        /// is enabled), into the "Daten - SOLL" preview buffer.
+        /// </summary>
+        private void RefreshDesfireDataFilePreview()
+        {
+            if (UseNextDataFileLinePerRun)
+            {
+                if (TryReadDesfireDataLineFromFile(DesfireDataFilePath, DesfireDataFileLineIndex, out var lineBytes, out var lineText, out var lineErrorMessage))
+                {
+                    ApplyDesfireFileData(lineBytes);
+                    StatusText += string.Format("{0}: Loaded line {1} ({2} bytes) from {3}: {4}\n", DateTime.Now, DesfireDataFileLineIndex + 1, lineBytes.Length, Path.GetFileName(DesfireDataFilePath), lineText);
+                }
+                else
+                {
+                    StatusText += string.Format("{0}: Unable to load line {1} from data file: {2}\n", DateTime.Now, DesfireDataFileLineIndex + 1, lineErrorMessage);
+                }
+            }
+            else
+            {
+                if (TryLoadDesfireDataFromFile(DesfireDataFilePath, out var bytes, out var errorMessage))
+                {
+                    ApplyDesfireFileData(bytes);
+                    StatusText += string.Format("{0}: Loaded {1} bytes from {2}\n", DateTime.Now, bytes.Length, Path.GetFileName(DesfireDataFilePath));
+                }
+                else
+                {
+                    StatusText += string.Format("{0}: Unable to load data file: {1}\n", DateTime.Now, errorMessage);
                 }
             }
         }
@@ -2707,8 +2811,35 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
         private async Task OnNewWriteDataCommand()
         {
             CurrentTaskErrorLevel = ERROR.Empty;
+            var consumedDataFileLine = false;
 
-            if (RefreshDesfireDataFromFileBeforeWrite)
+            if (UseNextDataFileLinePerRun)
+            {
+                if (string.IsNullOrWhiteSpace(DesfireDataFilePath))
+                {
+                    StatusText += string.Format("{0}: Zeilenweises Lesen aktiviert, aber es wurde keine Datei ausgewählt.\n", DateTime.Now);
+                    CurrentTaskErrorLevel = ERROR.Unknown;
+                    return;
+                }
+
+                if (!TryReadDesfireDataLineFromFile(DesfireDataFilePath, DesfireDataFileLineIndex, out var lineBytes, out var lineText, out var lineErrorMessage))
+                {
+                    StatusText += string.Format("{0}: {1}\n", DateTime.Now, lineErrorMessage);
+                    CurrentTaskErrorLevel = ERROR.Unknown;
+                    return;
+                }
+
+                if (!ConfirmWriteDataFileLine(lineText))
+                {
+                    StatusText += string.Format("{0}: Schreibvorgang durch Benutzer abgebrochen.\n", DateTime.Now);
+                    CurrentTaskErrorLevel = ERROR.Unknown;
+                    return;
+                }
+
+                ApplyDesfireFileData(lineBytes);
+                consumedDataFileLine = true;
+            }
+            else if (RefreshDesfireDataFromFileBeforeWrite)
             {
                 if (string.IsNullOrWhiteSpace(DesfireDataFilePath))
                 {
@@ -2760,6 +2891,14 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
                             {
                                 StatusText += string.Format("{0}: Successfully Wrote {2} Bytes to FileNo: {1} with Size: {2} in AppID: {3}\n", DateTime.Now, FileNumberCurrentAsInt, GrandChildNodeViewModel.SelectedDataLengthInBytes, AppNumberCurrentAsInt);
                                 await UpdateReaderStatusCommand.ExecuteAsync(false);
+
+                                if (consumedDataFileLine)
+                                {
+                                    // advance to the next line so that the following automatic run
+                                    // (e.g. "Markierte Aufgabe automatisch wiederholen") picks up new data
+                                    DesfireDataFileLineIndex++;
+                                    RefreshDesfireDataFilePreview();
+                                }
                             }
 
                             if (SelectedDesfireFileType == FileType_MifareDesfireFileType.BackupFile && device.GetType() == typeof(ElatecNetProvider))
@@ -2832,6 +2971,128 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
 
             data = parsedBytes;
             return true;
+        }
+
+        /// <summary>
+        /// Reads a single, zero-based indexed line of hex data from <paramref name="filePath"/>.
+        /// Empty lines are skipped so that blank lines in the source file don't consume an index.
+        /// </summary>
+        private bool TryReadDesfireDataLineFromFile(string filePath, int lineIndex, out byte[] data, out string lineText, out string errorMessage)
+        {
+            data = null;
+            lineText = null;
+            errorMessage = null;
+
+            if (string.IsNullOrWhiteSpace(filePath))
+            {
+                errorMessage = "File path is empty.";
+                return false;
+            }
+
+            if (!File.Exists(filePath))
+            {
+                errorMessage = "File does not exist.";
+                return false;
+            }
+
+            var lines = File.ReadAllLines(filePath)
+                             .Where(line => !string.IsNullOrWhiteSpace(line))
+                             .ToArray();
+
+            if (lines.Length == 0)
+            {
+                errorMessage = "File does not contain any usable lines.";
+                return false;
+            }
+
+            if (lineIndex < 0 || lineIndex >= lines.Length)
+            {
+                errorMessage = string.Format(CultureInfo.CurrentCulture, "Keine weiteren Zeilen in der Datei vorhanden (Zeile {0} von {1}).", lineIndex + 1, lines.Length);
+                return false;
+            }
+
+            lineText = lines[lineIndex].Trim();
+            var parsedBytes = CustomConverter.GetBytes(lineText, out _);
+
+            if (parsedBytes.Length == 0)
+            {
+                errorMessage = string.Format(CultureInfo.CurrentCulture, "Zeile {0} enthält keine gültigen Hex-Daten.", lineIndex + 1);
+                return false;
+            }
+
+            data = parsedBytes;
+            return true;
+        }
+
+        /// <summary>
+        /// Splits a data file line into its individual fields for DISPLAY purposes only, whenever the
+        /// source uses one of the common field separators (';', ',', '|'). Writing is unaffected by
+        /// this - <see cref="CustomConverter.GetBytes"/> already strips any non-hex character
+        /// (including these separators) when building the actual write payload, so a line like
+        /// "000000000572;00;00030005;0000000000" is always written as one contiguous hex string
+        /// regardless of how it's shown here.
+        /// </summary>
+        private static string FormatDataFileLineForDisplay(string lineText)
+        {
+            if (string.IsNullOrEmpty(lineText))
+            {
+                return lineText;
+            }
+
+            var fields = lineText.Split(new[] { ';', ',', '|' }, StringSplitOptions.None);
+
+            if (fields.Length <= 1)
+            {
+                return lineText;
+            }
+
+            return string.Join(Environment.NewLine, fields.Select(f => f.Trim()));
+        }
+
+        /// <summary>
+        /// Shows a modal confirmation dialog listing the data about to be written and blocks until
+        /// the user acknowledges it. Returns false if the user cancels.
+        /// </summary>
+        private bool ConfirmWriteDataFileLine(string lineText)
+        {
+            var confirmed = false;
+
+            var dlg = new CustomDialogViewModel
+            {
+                Caption = ResourceLoader.GetResource("messageBoxDefaultCaption"),
+                Message = string.Format(CultureInfo.CurrentCulture, ResourceLoader.GetResource("messageBoxTextConfirmWriteDataFileLine"), FormatDataFileLineForDisplay(lineText)),
+                OnOk = sender =>
+                {
+                    confirmed = true;
+                    sender.Close();
+                },
+                OnCancel = sender =>
+                {
+                    confirmed = false;
+                    sender.Close();
+                }
+            };
+
+            // Adding to Dialogs opens the dialog modally (DialogBehavior calls ShowDialog()),
+            // so this call blocks until the user clicks Ok or Cancel. Prefer ExternalDialogs,
+            // which TaskExecutionService points at the main window during automatic execution -
+            // this.Dialogs is only bound to a visible window while the task editor itself is open.
+            var dialogTarget = ExternalDialogs ?? this.Dialogs;
+
+            // Pause the task-timeout watchdog for as long as the popup is open - otherwise it can
+            // fire while the user is still reading the popup and mark the task failed even though
+            // the write goes on to succeed right after they click Ok.
+            SuspendExecutionWatchdog?.Invoke();
+            try
+            {
+                dlg.Show(dialogTarget);
+            }
+            finally
+            {
+                ResumeExecutionWatchdog?.Invoke();
+            }
+
+            return confirmed;
         }
 
         private void ApplyDesfireFileData(byte[] data)

@@ -858,6 +858,15 @@ Needed by:
   <data name="checkBoxContentMifareDesfireFileSetupRefreshDataFromFile" xml:space="preserve">
     <value>Reload before write</value>
   </data>
+  <data name="checkBoxContentMifareDesfireFileSetupUseNextLinePerRun" xml:space="preserve">
+    <value>Use next line from file per run</value>
+  </data>
+  <data name="buttonContentMifareDesfireFileSetupResetDataFileLineIndex" xml:space="preserve">
+    <value>Reset line counter</value>
+  </data>
+  <data name="messageBoxTextConfirmWriteDataFileLine" xml:space="preserve">
+    <value>Writing data {0}</value>
+  </data>
   <data name="buttonContentMifareDesfireFileSetupReadData" xml:space="preserve">
     <value>Read from File</value>
   </data>
