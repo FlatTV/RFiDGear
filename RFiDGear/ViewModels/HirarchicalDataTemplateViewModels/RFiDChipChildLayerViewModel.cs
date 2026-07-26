@@ -508,7 +508,7 @@ namespace RFiDGear.ViewModel
                     case CARD_TYPE.DESFireEV1:
                     case CARD_TYPE.DESFireEV2:
                     case CARD_TYPE.DESFireEV3:
-                        childNodeHeader = string.Format("AppID: {0} (0x{1})", appModel.appID, appModel.appID.ToString("X8"));
+                        childNodeHeader = string.Format("AppID: {0} (0x{1})", appModel.appID, appModel.appID.ToString("X6"));
                         break;
 
                     default:
