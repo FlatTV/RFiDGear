@@ -865,7 +865,8 @@ Needed by:
     <value>Reset line counter</value>
   </data>
   <data name="messageBoxTextConfirmWriteDataFileLine" xml:space="preserve">
-    <value>Writing data {0}</value>
+    <value>Writing data...
+{0}</value>
   </data>
   <data name="buttonContentMifareDesfireFileSetupReadData" xml:space="preserve">
     <value>Read from File</value>

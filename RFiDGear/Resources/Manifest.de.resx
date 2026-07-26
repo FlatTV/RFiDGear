@@ -872,7 +872,8 @@ Wird benötigt von:
     <value>Zeilenzähler zurücksetzen</value>
   </data>
   <data name="messageBoxTextConfirmWriteDataFileLine" xml:space="preserve">
-    <value>Daten {0} werden geschrieben</value>
+    <value>Daten werden geschrieben...
+{0}</value>
   </data>
   <data name="buttonContentMifareDesfireFileSetupReadData" xml:space="preserve">
     <value>Datei lesen</value>
