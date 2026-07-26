@@ -788,7 +788,7 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
                         break;
 
                     case TaskType_MifareDesfireTask.AppExistCheck:
-                        SetTabAvailability(false, false, false, false, false, true, true);
+                        SetTabAvailability(false, false, false, false, true, true, true);
                         break;
 
                     case TaskType_MifareDesfireTask.ApplicationKeyChangeover:
@@ -4054,19 +4054,26 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
                                 DesfireAppKeyCurrent,
                                 SelectedDesfireAppKeyEncryptionTypeCurrent);
 
-                        desfireChip.FreeMemory = device.DesfireChip.FreeMemory;
+                        // desfireChip is optional - CommandDelegator (the normal task-execution
+                        // path) calls this with null since it only cares about CurrentTaskErrorLevel,
+                        // not about capturing FreeMemory separately.
+                        if (desfireChip != null)
+                        {
+                            desfireChip.FreeMemory = device.DesfireChip.FreeMemory;
+                        }
                         //desfireChip.UID = device.GenericChip.Select(x => x.UID).UID;
 
-                        // Check if specified App "AppNumberCurrentAsInt" exist
-                        if (IsValidAppNumberCurrent != false && AppNumberCurrentAsInt > 0 && result == ERROR.NoError && Array.Exists<uint>(device.DesfireChip.AppIDs, x => x == (uint)AppNumberNewAsInt))
+                        // Check if specified App "AppNumberNewAsInt" exists (the "App Einstellungen"
+                        // tab's App ID field is what the user actually fills in for this task type)
+                        if (IsValidAppNumberNew != false && AppNumberNewAsInt > 0 && result == ERROR.NoError && Array.Exists<uint>(device.DesfireChip.AppIDs, x => x == (uint)AppNumberNewAsInt))
                         {
                             StatusText += string.Format("{0}: Success. App with ID:{1} exists\n", DateTime.Now, AppNumberNewAsInt);
 
                             CurrentTaskErrorLevel = ERROR.NoError;
                         }
 
-                        // Check if ANY App exists
-                        else if (IsValidAppNumberCurrent != false && AppNumberCurrentAsInt == 0 && result == ERROR.NoError && Array.Exists<uint>(device.DesfireChip.AppIDs, x => x > 0))
+                        // Check if ANY App exists (App ID left at 0)
+                        else if (IsValidAppNumberNew != false && AppNumberNewAsInt == 0 && result == ERROR.NoError && Array.Exists<uint>(device.DesfireChip.AppIDs, x => x > 0))
                         {
                             StatusText += string.Format("{0}: Success. Existing Apps Detected\n", DateTime.Now);
 
@@ -4074,7 +4081,7 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
                         }
 
                         // Ooops: Iam not allowed to get the info or Key "DesfireAppKeyCurrent" with "SelectedDesfireAppKeyEncryptionTypeCurrent" is incorrect
-                        else if (IsValidAppNumberCurrent != false && result == ERROR.AuthFailure)
+                        else if (IsValidAppNumberNew != false && result == ERROR.AuthFailure)
                         {
                             StatusText += string.Format("{0}: Failed. Directory Listing is not allowed and PICC MK is Incorrect.\n", DateTime.Now);
 
