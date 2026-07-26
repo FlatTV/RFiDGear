@@ -288,6 +288,17 @@ namespace RFiDGear.Services.TaskExecution
         private readonly IDispatcherTimerAdapter taskTimeout;
         private readonly ITaskExecutionLogger logger;
         private TaskExecutionRequest activeRequest;
+
+        /// <summary>
+        /// Tracks which task indices have already had their command invoked during the current
+        /// <see cref="ExecuteOnceAsync"/> pass. ERROR.TransportError is (ab)used both as a
+        /// "task is currently executing, keep waiting" marker AND as a legitimate real result
+        /// some hardware operations report on genuine failure (e.g. a failed key change). Without
+        /// this, a task whose real outcome happens to be ERROR.TransportError is indistinguishable
+        /// from "still running" and the loop waits on it forever instead of moving on like it does
+        /// for every other error outcome.
+        /// </summary>
+        private readonly HashSet<int> attemptedTaskIndices = new HashSet<int>();
         private static readonly HashSet<ERROR> RoutedErrorLevels = new HashSet<ERROR>
         {
             ERROR.AuthFailure,
@@ -316,6 +327,7 @@ namespace RFiDGear.Services.TaskExecution
         {
             activeRequest = request;
             CurrentTaskIndex = 0;
+            attemptedTaskIndices.Clear();
 
             var result = new TaskExecutionResult
             {
@@ -674,6 +686,27 @@ namespace RFiDGear.Services.TaskExecution
             }
         }
 
+        /// <summary>
+        /// Shared handling for every task-type handler's "case ERROR.TransportError:" branch. If
+        /// <paramref name="taskIndex"/> has already had its command invoked once (see
+        /// <see cref="attemptedTaskIndices"/>), seeing ERROR.TransportError again means the
+        /// command already ran and genuinely returned TransportError as its final result - not
+        /// that it's still executing - so advance past it like any other resolved error instead of
+        /// waiting forever. Otherwise (first time we've seen this task waiting), just re-arm the
+        /// watchdog and keep waiting for the in-flight command to finish.
+        /// </summary>
+        private void WaitOrAdvancePastTransportError(bool restartWatchdog = true)
+        {
+            if (attemptedTaskIndices.Contains(CurrentTaskIndex))
+            {
+                CurrentTaskIndex++;
+            }
+            else if (restartWatchdog)
+            {
+                taskTimeout.Start();
+            }
+        }
+
         private void RecordTaskAttempt(IGenericTask taskModel)
         {
             if (taskModel == null || taskModel.AttemptResults == null)
@@ -724,9 +757,11 @@ namespace RFiDGear.Services.TaskExecution
                     switch ((request.TaskHandler.TaskCollection[CurrentTaskIndex] as IGenericTask).CurrentTaskErrorLevel)
                     {
                         case ERROR.TransportError:
+                            WaitOrAdvancePastTransportError(restartWatchdog: false);
                             break;
 
                         case ERROR.Empty:
+                            attemptedTaskIndices.Add(CurrentTaskIndex);
                             (request.TaskHandler.TaskCollection[CurrentTaskIndex] as IGenericTask).CurrentTaskErrorLevel = ERROR.TransportError;
                             taskTimeout.Start();
                             taskTimeout.Stop();
@@ -835,10 +870,11 @@ namespace RFiDGear.Services.TaskExecution
                     switch ((request.TaskHandler.TaskCollection[CurrentTaskIndex] as CommonTaskViewModel).CurrentTaskErrorLevel)
                     {
                         case ERROR.TransportError:
-                            taskTimeout.Start();
+                            WaitOrAdvancePastTransportError();
                             break;
 
                         case ERROR.Empty:
+                            attemptedTaskIndices.Add(CurrentTaskIndex);
                             (request.TaskHandler.TaskCollection[CurrentTaskIndex] as IGenericTask).CurrentTaskErrorLevel = ERROR.TransportError;
                             taskTimeout.Start();
 
@@ -876,10 +912,11 @@ namespace RFiDGear.Services.TaskExecution
                     switch ((request.TaskHandler.TaskCollection[CurrentTaskIndex] as CommonTaskViewModel).CurrentTaskErrorLevel)
                     {
                         case ERROR.TransportError:
-                            taskTimeout.Start();
+                            WaitOrAdvancePastTransportError();
                             break;
 
                         case ERROR.Empty:
+                            attemptedTaskIndices.Add(CurrentTaskIndex);
                             (request.TaskHandler.TaskCollection[CurrentTaskIndex] as IGenericTask).CurrentTaskErrorLevel = ERROR.TransportError;
                             taskTimeout.Start();
 
@@ -1016,10 +1053,11 @@ namespace RFiDGear.Services.TaskExecution
             switch ((request.TaskHandler.TaskCollection[CurrentTaskIndex] as IGenericTask).CurrentTaskErrorLevel)
             {
                 case ERROR.TransportError:
-                    taskTimeout.Start();
+                    WaitOrAdvancePastTransportError();
                     break;
 
                 case ERROR.Empty:
+                    attemptedTaskIndices.Add(CurrentTaskIndex);
                     (request.TaskHandler.TaskCollection[CurrentTaskIndex] as IGenericTask).CurrentTaskErrorLevel = ERROR.TransportError;
                     taskTimeout.Start();
 
@@ -1090,10 +1128,11 @@ namespace RFiDGear.Services.TaskExecution
             switch ((request.TaskHandler.TaskCollection[CurrentTaskIndex] as IGenericTask).CurrentTaskErrorLevel)
             {
                 case ERROR.TransportError:
-                    taskTimeout.Start();
+                    WaitOrAdvancePastTransportError();
                     break;
 
                 case ERROR.Empty:
+                    attemptedTaskIndices.Add(CurrentTaskIndex);
                     (request.TaskHandler.TaskCollection[CurrentTaskIndex] as IGenericTask).CurrentTaskErrorLevel = ERROR.TransportError;
                     taskTimeout.Start();
 
