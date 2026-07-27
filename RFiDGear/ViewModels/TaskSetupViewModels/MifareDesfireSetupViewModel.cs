@@ -50,6 +50,7 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
         private bool refreshDesfireDataFromFileBeforeWrite;
         private string desfireReadDataFilePath;
         private bool overwriteReadDataFileOnRead;
+        private bool appendReadDataFileOnRead;
 
         private protected SettingsReaderWriter settings = new SettingsReaderWriter();
 
@@ -2193,6 +2194,7 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
 
         /// <summary>
         /// Determines whether read data should overwrite the selected file on each read.
+        /// Mutually exclusive with <see cref="AppendReadDataFileOnRead"/>.
         /// </summary>
         public bool OverwriteReadDataFileOnRead
         {
@@ -2201,6 +2203,33 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
             {
                 overwriteReadDataFileOnRead = value;
                 OnPropertyChanged(nameof(OverwriteReadDataFileOnRead));
+
+                if (value && appendReadDataFileOnRead)
+                {
+                    AppendReadDataFileOnRead = false;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Determines whether read data should be appended (as a new line) to the selected file on
+        /// each read, instead of overwriting it or writing a new uniquely-named file each time.
+        /// Useful together with "Markierte Aufgabe automatisch wiederholen" to collect the read
+        /// results of a whole batch of cards into a single file, one line per card. Mutually
+        /// exclusive with <see cref="OverwriteReadDataFileOnRead"/>.
+        /// </summary>
+        public bool AppendReadDataFileOnRead
+        {
+            get => appendReadDataFileOnRead;
+            set
+            {
+                appendReadDataFileOnRead = value;
+                OnPropertyChanged(nameof(AppendReadDataFileOnRead));
+
+                if (value && overwriteReadDataFileOnRead)
+                {
+                    OverwriteReadDataFileOnRead = false;
+                }
             }
         }
 
@@ -3215,7 +3244,7 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
                 return null;
             }
 
-            if (OverwriteReadDataFileOnRead)
+            if (OverwriteReadDataFileOnRead || AppendReadDataFileOnRead)
             {
                 return DesfireReadDataFilePath;
             }
@@ -3256,8 +3285,17 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
             try
             {
                 var hexPayload = CustomConverter.HexToString(data);
-                File.WriteAllText(outputPath, hexPayload);
-                StatusText += string.Format("{0}: Saved read data to {1}\n", DateTime.Now, outputPath);
+
+                if (AppendReadDataFileOnRead)
+                {
+                    File.AppendAllText(outputPath, hexPayload + Environment.NewLine);
+                    StatusText += string.Format("{0}: Appended read data to {1}\n", DateTime.Now, outputPath);
+                }
+                else
+                {
+                    File.WriteAllText(outputPath, hexPayload);
+                    StatusText += string.Format("{0}: Saved read data to {1}\n", DateTime.Now, outputPath);
+                }
             }
             catch (Exception e)
             {

@@ -855,6 +855,9 @@ Needed by:
   <data name="checkBoxContentMifareDesfireFileSetupOverwriteOnRead" xml:space="preserve">
     <value>Overwrite on read</value>
   </data>
+  <data name="checkBoxContentMifareDesfireFileSetupAppendOnRead" xml:space="preserve">
+    <value>Append on read</value>
+  </data>
   <data name="checkBoxContentMifareDesfireFileSetupRefreshDataFromFile" xml:space="preserve">
     <value>Reload before write</value>
   </data>

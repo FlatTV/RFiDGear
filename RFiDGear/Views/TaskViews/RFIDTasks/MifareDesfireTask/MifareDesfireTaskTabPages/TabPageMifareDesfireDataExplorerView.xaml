@@ -609,6 +609,14 @@
                         VerticalAlignment="Center"
                         Content="{Binding LocalizationResourceSet, Converter={StaticResource Localization}, ConverterParameter='checkBoxContentMifareDesfireFileSetupOverwriteOnRead'}"
                         IsChecked="{Binding OverwriteReadDataFileOnRead, UpdateSourceTrigger=PropertyChanged, Mode=TwoWay}" />
+                    <CheckBox
+                        Grid.Row="6"
+                        Grid.Column="4"
+                        Margin="8,0,8,7"
+                        HorizontalAlignment="Left"
+                        VerticalAlignment="Center"
+                        Content="{Binding LocalizationResourceSet, Converter={StaticResource Localization}, ConverterParameter='checkBoxContentMifareDesfireFileSetupAppendOnRead'}"
+                        IsChecked="{Binding AppendReadDataFileOnRead, UpdateSourceTrigger=PropertyChanged, Mode=TwoWay}" />
                     <Button
                         Grid.Row="7"
                         Grid.Column="0"

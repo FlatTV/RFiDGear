@@ -862,6 +862,9 @@ Wird benötigt von:
   <data name="checkBoxContentMifareDesfireFileSetupOverwriteOnRead" xml:space="preserve">
     <value>Beim Lesen überschreiben</value>
   </data>
+  <data name="checkBoxContentMifareDesfireFileSetupAppendOnRead" xml:space="preserve">
+    <value>Beim Lesen anhängen</value>
+  </data>
   <data name="checkBoxContentMifareDesfireFileSetupRefreshDataFromFile" xml:space="preserve">
     <value>Vor Schreiben neu laden</value>
   </data>
