@@ -60,6 +60,20 @@ namespace RFiDGear.UI.MVVMDialogs.ViewModels
             }
         }
 
+        public ICommand PreviousCommand => new RelayCommand(Previous);
+
+        protected virtual void Previous()
+        {
+            OnPrevious?.Invoke(this);
+        }
+
+        public ICommand NextCommand => new RelayCommand(Next);
+
+        protected virtual void Next()
+        {
+            OnNext?.Invoke(this);
+        }
+
         #endregion Commands
 
         private Window _ParentWindow = null;
@@ -86,9 +100,41 @@ namespace RFiDGear.UI.MVVMDialogs.ViewModels
             set { _Caption = value; OnPropertyChanged(nameof(Caption)); }
         }
 
+        private bool _ShowNavigation;
+
+        /// <summary>
+        /// When true, shows "Zurück"/"Vor" buttons that let the caller step through a set of
+        /// records (e.g. lines of a source file) while the dialog stays open, without closing it.
+        /// The caller wires <see cref="OnPrevious"/>/<see cref="OnNext"/> to update
+        /// <see cref="Message"/> (and its own tracked "current index") accordingly.
+        /// </summary>
+        public bool ShowNavigation
+        {
+            get => _ShowNavigation;
+            set { _ShowNavigation = value; OnPropertyChanged(nameof(ShowNavigation)); }
+        }
+
+        private bool _IsPreviousEnabled = true;
+
+        public bool IsPreviousEnabled
+        {
+            get => _IsPreviousEnabled;
+            set { _IsPreviousEnabled = value; OnPropertyChanged(nameof(IsPreviousEnabled)); }
+        }
+
+        private bool _IsNextEnabled = true;
+
+        public bool IsNextEnabled
+        {
+            get => _IsNextEnabled;
+            set { _IsNextEnabled = value; OnPropertyChanged(nameof(IsNextEnabled)); }
+        }
+
         public Action<CustomDialogViewModel> OnOk { get; set; }
         public Action<CustomDialogViewModel> OnCancel { get; set; }
         public Action<CustomDialogViewModel> OnCloseRequest { get; set; }
+        public Action<CustomDialogViewModel> OnPrevious { get; set; }
+        public Action<CustomDialogViewModel> OnNext { get; set; }
 
         public CustomDialogViewModel(bool isModal = true)
         {

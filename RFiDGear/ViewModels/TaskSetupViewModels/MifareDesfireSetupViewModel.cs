@@ -2851,21 +2851,27 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
                     return;
                 }
 
-                if (!TryReadDesfireDataLineFromFile(DesfireDataFilePath, DesfireDataFileLineIndex, out var lineBytes, out var lineText, out var lineErrorMessage))
+                if (!TryReadDesfireDataLineFromFile(DesfireDataFilePath, DesfireDataFileLineIndex, out _, out _, out var lineErrorMessage))
                 {
                     StatusText += string.Format("{0}: {1}\n", DateTime.Now, lineErrorMessage);
                     CurrentTaskErrorLevel = ERROR.Unknown;
                     return;
                 }
 
-                if (!ConfirmWriteDataFileLine(lineText))
+                if (!ConfirmWriteDataFileLine(DesfireDataFileLineIndex, out var confirmedBytes, out var confirmedLineIndex))
                 {
                     StatusText += string.Format("{0}: Schreibvorgang durch Benutzer abgebrochen.\n", DateTime.Now);
                     CurrentTaskErrorLevel = ERROR.Unknown;
                     return;
                 }
 
-                ApplyDesfireFileData(lineBytes);
+                if (confirmedLineIndex != DesfireDataFileLineIndex)
+                {
+                    StatusText += string.Format("{0}: Datensatz auf Zeile {1} gewechselt.\n", DateTime.Now, confirmedLineIndex + 1);
+                    DesfireDataFileLineIndex = confirmedLineIndex;
+                }
+
+                ApplyDesfireFileData(confirmedBytes);
                 consumedDataFileLine = true;
             }
             else if (RefreshDesfireDataFromFileBeforeWrite)
@@ -3079,27 +3085,58 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
         }
 
         /// <summary>
-        /// Shows a modal confirmation dialog listing the data about to be written and blocks until
-        /// the user acknowledges it. Returns false if the user cancels.
+        /// Shows a modal confirmation dialog for the data about to be written, with "Zurück"/"Vor"
+        /// navigation through the source file's lines so a record can be skipped (or revisited)
+        /// before confirming - e.g. to skip a bad line without editing the file itself. Blocks
+        /// until the user clicks Ok or Cancel.
         /// </summary>
-        private bool ConfirmWriteDataFileLine(string lineText)
+        /// <param name="startLineIndex">Index of the line to show first (normally the current
+        /// <see cref="DesfireDataFileLineIndex"/>).</param>
+        /// <param name="confirmedBytes">Data of whichever line the user had on screen when
+        /// confirming. Unchanged from the <paramref name="startLineIndex"/> line's data if the
+        /// user cancels.</param>
+        /// <param name="confirmedLineIndex">Index of that line, so the caller can pick up counting
+        /// from there for the next run.</param>
+        private bool ConfirmWriteDataFileLine(int startLineIndex, out byte[] confirmedBytes, out int confirmedLineIndex)
         {
             var confirmed = false;
+            var currentIndex = startLineIndex;
+            byte[] currentBytes = null;
 
             var dlg = new CustomDialogViewModel
             {
-                Caption = ResourceLoader.GetResource("messageBoxDefaultCaption"),
-                Message = string.Format(CultureInfo.CurrentCulture, ResourceLoader.GetResource("messageBoxTextConfirmWriteDataFileLine"), FormatDataFileLineForDisplay(lineText)),
-                OnOk = sender =>
+                Caption = ResourceLoader.GetResource("messageBoxTextConfirmWriteDataFileLine"),
+                ShowNavigation = true,
+            };
+
+            void LoadLine(int index)
+            {
+                if (!TryReadDesfireDataLineFromFile(DesfireDataFilePath, index, out var bytes, out var text, out _))
                 {
-                    confirmed = true;
-                    sender.Close();
-                },
-                OnCancel = sender =>
-                {
-                    confirmed = false;
-                    sender.Close();
+                    // out of range (before the first or past the last line) - leave the dialog
+                    // showing whatever it already showed instead of blanking it out.
+                    return;
                 }
+
+                currentIndex = index;
+                currentBytes = bytes;
+                dlg.Message = FormatDataFileLineForDisplay(text);
+                dlg.IsPreviousEnabled = currentIndex > 0;
+            }
+
+            LoadLine(startLineIndex);
+
+            dlg.OnPrevious = sender => LoadLine(currentIndex - 1);
+            dlg.OnNext = sender => LoadLine(currentIndex + 1);
+            dlg.OnOk = sender =>
+            {
+                confirmed = true;
+                sender.Close();
+            };
+            dlg.OnCancel = sender =>
+            {
+                confirmed = false;
+                sender.Close();
             };
 
             // Adding to Dialogs opens the dialog modally (DialogBehavior calls ShowDialog()),
@@ -3121,6 +3158,8 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
                 ResumeExecutionWatchdog?.Invoke();
             }
 
+            confirmedBytes = currentBytes;
+            confirmedLineIndex = currentIndex;
             return confirmed;
         }
 

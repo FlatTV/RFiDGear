@@ -6,17 +6,19 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     Title="{Binding Caption}"
     Width="350"
-    Height="150"
     ResizeMode="NoResize"
     WindowStartupLocation="CenterOwner"
     HorizontalContentAlignment="Left"
     FontFamily="Segoe UI"
     FontWeight="Normal"
     SizeToContent="Height">
+    <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVisConv" />
+    </Window.Resources>
     <Grid Margin="8,8,8,8">
         <Grid.RowDefinitions>
             <RowDefinition/>
-            <RowDefinition Height="60"/>
+            <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
         <TextBox
             Grid.Row="0"
@@ -26,23 +28,60 @@
             Margin="8,8,8,0"
             BorderBrush="Transparent"
             VerticalAlignment="Stretch"
+            IsReadOnly="True"
+            Focusable="False"
             Text="{Binding Message}"
             TextWrapping="Wrap" />
-        <Button
-            Width="75"
-            Height="26"
-            Padding="5,2"
-            HorizontalAlignment="Right"
-            VerticalAlignment="Bottom"
-            Command="{Binding CancelCommand}"
-            Content="Cancel"
-            IsDefault="True" Margin="0,0,10,10" Grid.Row="1" />
-        <Button
-            Height="26"
-            Padding="5,2"
-            Margin="144,0,115,10"
-            VerticalAlignment="Bottom"
-            Command="{Binding OkCommand}"
-            Content="Ok" Grid.Row="1" />
+        <Grid Grid.Row="1" Margin="8,10,8,8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <StackPanel
+                Grid.Column="0"
+                VerticalAlignment="Center"
+                Orientation="Horizontal"
+                Visibility="{Binding ShowNavigation, Converter={StaticResource BoolToVisConv}}">
+                <Button
+                    Width="32"
+                    Height="26"
+                    Margin="0,0,4,0"
+                    Padding="0"
+                    FontSize="14"
+                    Command="{Binding PreviousCommand}"
+                    Content="◀"
+                    IsEnabled="{Binding IsPreviousEnabled}"
+                    ToolTip="Zurück" />
+                <Button
+                    Width="32"
+                    Height="26"
+                    Padding="0"
+                    FontSize="14"
+                    Command="{Binding NextCommand}"
+                    Content="▶"
+                    IsEnabled="{Binding IsNextEnabled}"
+                    ToolTip="Vor" />
+            </StackPanel>
+            <StackPanel
+                Grid.Column="2"
+                VerticalAlignment="Center"
+                Orientation="Horizontal">
+                <Button
+                    Width="75"
+                    Height="26"
+                    Margin="0,0,6,0"
+                    Padding="5,2"
+                    Command="{Binding OkCommand}"
+                    Content="Ok" />
+                <Button
+                    Width="75"
+                    Height="26"
+                    Padding="5,2"
+                    Command="{Binding CancelCommand}"
+                    Content="Cancel"
+                    IsDefault="True" />
+            </StackPanel>
+        </Grid>
     </Grid>
 </Window>
