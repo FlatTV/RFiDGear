@@ -366,13 +366,14 @@ namespace RFiDGear.ViewModel
             {
 
                 //try to get singleton instance
+                ERROR readResult;
                 using (var device = ReaderDevice.Instance)
                 {
                     //reader was ready - proceed
                     if (device != null)
                     {
                         IsReaderBusy = true;
-                        await device.ReadChipPublic();
+                        readResult = await device.ReadChipPublic();
 
                         GenericChip = device.GenericChip;
 
@@ -383,8 +384,14 @@ namespace RFiDGear.ViewModel
                         return;
                     }
                 }
-                //proceed to create dummy only when uid is yet unknown
-                if (!string.IsNullOrWhiteSpace(GenericChip.UID) &&
+                //proceed to create dummy only when a chip was actually (re-)read successfully this
+                //time and its uid is yet unknown. device.GenericChip is only updated when a card is
+                //actually found - when the reader is empty or not ready, it keeps holding whatever
+                //chip was read last, so checking GenericChip.UID alone isn't enough: without also
+                //checking readResult, re-enabling "Aufgaben automatisch wiederholen" with no card on
+                //the reader could still fire off tasks against that stale, no-longer-present chip.
+                if (readResult == ERROR.NoError &&
+                    !string.IsNullOrWhiteSpace(GenericChip.UID) &&
                     !treeViewParentNodes.Any(x => (x.UID == GenericChip.UID)))
                 {
                     foreach (var item in treeViewParentNodes)
