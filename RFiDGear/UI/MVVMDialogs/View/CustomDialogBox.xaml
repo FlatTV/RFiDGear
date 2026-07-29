@@ -20,18 +20,26 @@
             <RowDefinition/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
-        <TextBox
+        <Border
             Grid.Row="0"
             Grid.Column="0"
-            Width="auto"
-            Height="auto"
             Margin="8,8,8,0"
-            BorderBrush="Transparent"
-            VerticalAlignment="Stretch"
-            IsReadOnly="True"
-            Focusable="False"
-            Text="{Binding Message}"
-            TextWrapping="Wrap" />
+            Padding="10,8"
+            BorderBrush="#CCCCCC"
+            BorderThickness="1"
+            CornerRadius="3"
+            Background="#FAFAFA">
+            <TextBox
+                Width="auto"
+                Height="auto"
+                BorderThickness="0"
+                Background="Transparent"
+                VerticalAlignment="Stretch"
+                IsReadOnly="True"
+                Focusable="False"
+                Text="{Binding Message}"
+                TextWrapping="Wrap" />
+        </Border>
         <Grid Grid.Row="1" Margin="8,10,8,8">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto" />
