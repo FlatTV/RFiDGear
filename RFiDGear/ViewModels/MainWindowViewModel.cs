@@ -1760,7 +1760,7 @@ namespace RFiDGear.ViewModel
             Application.Current.MainWindow.Activated -= new EventHandler(LoadCompleted);
 
             mw = (MainWindow)Application.Current.MainWindow;
-            mw.Title = string.Format("RFiDGear v{0}.{1}.{2} bam5br edition", Version.Major, Version.Minor, Version.Build);
+            mw.Title = string.Format("RFiDGear v{0}.{1}.{2} bam5br-Edition", Version.Major, Version.Minor, Version.Build);
 
             updateScheduler.Begin(() => AskForUpdateNow());
             readerMonitor.StartMonitoring(CheckReader);
