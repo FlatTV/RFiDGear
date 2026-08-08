@@ -2725,7 +2725,7 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
 
                                 OnPropertyChanged(nameof(ChildNodeViewModelTemp));
                                 OnPropertyChanged(nameof(ChildNodeViewModelFromChip));
-                                SaveReadDataToFile(device.MifareDESFireData);
+                                SaveReadDataToFile(device.MifareDESFireData, device.GenericChip?.UID);
                                 await UpdateReaderStatusCommand.ExecuteAsync(false);
                                 return;
                             }
@@ -3299,7 +3299,7 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
                 : Path.Combine(directory, fileName);
         }
 
-        private void SaveReadDataToFile(byte[] data)
+        private void SaveReadDataToFile(byte[] data, string chipUid)
         {
             if (data == null || data.Length == 0)
             {
@@ -3324,15 +3324,17 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
             try
             {
                 var hexPayload = CustomConverter.HexToString(data);
+                var timestamp = DateTime.Now.ToString("dd.MM.yyyy HH:mm:ss", CultureInfo.InvariantCulture);
+                var logLine = string.Format("{0};{1};{2}", timestamp, string.IsNullOrWhiteSpace(chipUid) ? "chipUid unknown" : chipUid, hexPayload);
 
                 if (AppendReadDataFileOnRead)
                 {
-                    File.AppendAllText(outputPath, hexPayload + Environment.NewLine);
+                    File.AppendAllText(outputPath, logLine + Environment.NewLine);
                     StatusText += string.Format("{0}: Appended read data to {1}\n", DateTime.Now, outputPath);
                 }
                 else
                 {
-                    File.WriteAllText(outputPath, hexPayload);
+                    File.WriteAllText(outputPath, logLine);
                     StatusText += string.Format("{0}: Saved read data to {1}\n", DateTime.Now, outputPath);
                 }
             }
