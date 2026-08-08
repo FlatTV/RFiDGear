@@ -2395,7 +2395,7 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
                 switch (desfireTaskType)
                 {
                     case TaskType_MifareDesfireTask.AppExistCheck:
-                        await DoesAppExistCommand(null);
+                        await DoesAppExistCommand(new MifareDesfireChipModel());
                         break;
 
                     case TaskType_MifareDesfireTask.ApplicationKeyChangeover:
@@ -2475,7 +2475,7 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
 
                     StatusText = string.Format("{0}: {1}\n", DateTime.Now, ResourceLoader.GetResource("textBoxStatusTextBoxDllLoaded"));
 
-                    if (IsValidDesfireKeyValue(DesfireReadKeyCurrent, SelectedDesfireReadKeyEncryptionType))
+                    if (IsValidMifareDesfireKeyString(DesfireReadKeyCurrent, SelectedDesfireReadKeyEncryptionType))
                     {
                         if (IsValidAppNumberNew == false)
                         {
@@ -2492,7 +2492,7 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
                         keySettings |= IsAllowCreateDelWithoutMKChecked ? (DESFireKeySettings)4 : (DESFireKeySettings)0;
                         keySettings |= IsAllowConfigChangableChecked ? (DESFireKeySettings)8 : (DESFireKeySettings)0;
 
-                        // Attempt 1: try creating the application without authenticating to the PICC
+                        // Attempt 1: Try creating the application without authenticating to the PICC
                         // master key first. Some cards' PICC configuration permits free application
                         // creation (DESFireKeySettings.AllowFreeCreateDeleteWithoutMasterKey); this
                         // avoids an unnecessary (and, on some cards, rate-limited) authentication
@@ -2530,7 +2530,7 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
                             return;
                         }
 
-                        // Attempt 2: the card rejected free creation, so this PICC requires
+                        // Attempt 2: The card rejected free creation, so this PICC requires
                         // master-key authentication. Let the provider authenticate and create in
                         // one atomic call (authenticateToPICCFirst: true) rather than authenticating
                         // here and retrying separately: the create call issues its own
@@ -4140,7 +4140,7 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
                         }
                         //desfireChip.UID = device.GenericChip.Select(x => x.UID).UID;
 
-                        // Check if specified App "AppNumberNewAsInt" exists (the "App Einstellungen"
+                        // Check if specified App "AppNumberNewAsInt" exists
                         // tab's App ID field is what the user actually fills in for this task type)
                         if (IsValidAppNumberNew != false && AppNumberNewAsInt > 0 && result == ERROR.NoError && Array.Exists<uint>(device.DesfireChip.AppIDs, x => x == (uint)AppNumberNewAsInt))
                         {

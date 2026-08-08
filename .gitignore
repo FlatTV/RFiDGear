@@ -8,6 +8,8 @@
 /Setup/obj
 *.pdf
 *.xml
+!update.xml
+!**/update.xml
 *.zip
 *.htm
 *.txt
@@ -32,3 +34,5 @@
 /RFiDGearBundleSetup/obj
 /RFiDGearBundleSetup/bin
 /RFiDGear.Extensions/VCNEditor/RFiDGear.Extensions.VCNEditor.csproj
+/.claude
+RFiDGear/.claude/settings.local.json

@@ -519,6 +519,12 @@ Soll die Aktualisierung jetzt herunter geladen und installiert werden?</value>
   <data name="messageBoxUpdateAvailableCaption" xml:space="preserve">
     <value>Aktualisierung verfügbar</value>
   </data>
+  <data name="messageBoxNoUpdateAvailableCaption" xml:space="preserve">
+    <value>Kein Update verfügbar</value>
+  </data>
+  <data name="messageBoxNoUpdateAvailableMessage" xml:space="preserve">
+    <value>Sie verwenden bereits die neueste Version von RFiDGear.</value>
+  </data>
   <data name="menuItemProgrammingHeader" xml:space="preserve">
     <value>_Programmierung</value>
   </data>
@@ -1759,5 +1765,37 @@ https://github.com/c3rebro/rfidgear</value>
   </data>
   <data name="tooltipAppIdHexInput" xml:space="preserve">
     <value>Dezimal (z. B. 5) oder Hex mit 0x-Präfix (z. B. 0x000005), Bereich 0x000000 bis 0xFFFFFF</value>
+  <data name="windowCaptionQuickCheckKeys" xml:space="preserve">
+    <value>Standardschlüssel konfigurieren</value>
+  </data>
+  <data name="labelDesfireDefaultKeysSection" xml:space="preserve">
+    <value>DESFire-Standardschlüssel</value>
+  </data>
+  <data name="labelClassicDefaultKeysSection" xml:space="preserve">
+    <value>MIFARE Classic-Schlüssel</value>
+  </data>
+  <data name="labelQuickCheckKeyPiccMaster" xml:space="preserve">
+    <value>PICC-Masterschlüssel</value>
+  </data>
+  <data name="labelQuickCheckKeyAppMaster" xml:space="preserve">
+    <value>Anwendungs-Masterschlüssel</value>
+  </data>
+  <data name="labelQuickCheckKeyRead" xml:space="preserve">
+    <value>Leseschlüssel</value>
+  </data>
+  <data name="labelQuickCheckKeyWrite" xml:space="preserve">
+    <value>Schreibschlüssel</value>
+  </data>
+  <data name="labelQuickCheckKeyEncType" xml:space="preserve">
+    <value>Verschlüsselung</value>
+  </data>
+  <data name="checkBoxDoNotAskAgain" xml:space="preserve">
+    <value>Nicht mehr fragen</value>
+  </data>
+  <data name="checkBoxPromptForKeysBeforeQuickCheck" xml:space="preserve">
+    <value>Vor Quick-Check nach Schlüsseln fragen</value>
+  </data>
+  <data name="tabPageDefaultKeysCaption" xml:space="preserve">
+    <value>Standardschlüssel</value>
   </data>
 </root>

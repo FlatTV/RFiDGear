@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Wix xmlns="http://schemas.microsoft.com/wix/2006/wi" xmlns:util="http://schemas.microsoft.com/wix/UtilExtension" xmlns:bal="http://schemas.microsoft.com/wix/BalExtension">
-	<?define VersionNumber="2.0.3" ?>
+	<?define VersionNumber="2.0.5.0" ?>
 	
 	<?define UpgradeCode="a34bc413-e349-4fd1-8b90-32f95a333477" ?>
 	<!-- The URL for add/remove programs -->
@@ -125,13 +125,13 @@
 			            SourceFile="..\RFiDGearSetup\RFiDGear_Setup_x64\bin\x64\Release\de-de\RFiDGear_Setup_x64.msi"
 			            InstallCondition="VersionNT64 AND (WixBundleUILanguage = 1031)" />
 			<MsiPackage Id="RFiDGear_x86_de" Cache="no" Compressed="yes" Vital="yes" ForcePerMachine="yes"
-			            SourceFile="..\RFiDGearSetup\RFiDGear_Setup_x86\bin\x64\Release\de-de\RFiDGear_Setup_x86.msi"
+			            SourceFile="..\RFiDGearSetup\RFiDGear_Setup_x86\bin\x86\Release\de-de\RFiDGear_Setup_x86.msi"
 			            InstallCondition="NOT VersionNT64 AND (WixBundleUILanguage = 1031)" />
 			<MsiPackage Id="RFiDGear_x64_en" Cache="no" Compressed="yes" Vital="yes" ForcePerMachine="yes"
 			            SourceFile="..\RFiDGearSetup\RFiDGear_Setup_x64\bin\x64\Release\en-us\RFiDGear_Setup_x64.msi"
 			            InstallCondition="VersionNT64 AND NOT (WixBundleUILanguage = 1031)" />
 			<MsiPackage Id="RFiDGear_x86_en" Cache="no" Compressed="yes" Vital="yes" ForcePerMachine="yes"
-			            SourceFile="..\RFiDGearSetup\RFiDGear_Setup_x86\bin\x64\Release\en-us\RFiDGear_Setup_x86.msi"
+			            SourceFile="..\RFiDGearSetup\RFiDGear_Setup_x86\bin\x86\Release\en-us\RFiDGear_Setup_x86.msi"
 			            InstallCondition="NOT VersionNT64 AND NOT (WixBundleUILanguage = 1031)" />
 		</Chain>
 	</Bundle>

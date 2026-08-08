@@ -504,6 +504,12 @@ Use a csv file to acuire default keys for authentication</value>
   <data name="messageBoxUpdateAvailableMessage" xml:space="preserve">
     <value>A newer Version of RFiDGear was found. Would you like to Download an Install the Update?</value>
   </data>
+  <data name="messageBoxNoUpdateAvailableCaption" xml:space="preserve">
+    <value>No Update Available</value>
+  </data>
+  <data name="messageBoxNoUpdateAvailableMessage" xml:space="preserve">
+    <value>You are running the latest version of RFiDGear.</value>
+  </data>
   <data name="menuItemProgrammingHeader" xml:space="preserve">
     <value>_Programming</value>
   </data>
@@ -1737,5 +1743,37 @@ https://github.com/c3rebro/rfidgear</value>
   </data>
   <data name="tooltipAppIdHexInput" xml:space="preserve">
     <value>Decimal (e.g. 5) or hex with 0x prefix (e.g. 0x000005), range 0x000000 to 0xFFFFFF</value>
+  <data name="windowCaptionQuickCheckKeys" xml:space="preserve">
+    <value>Configure Quick-Check Keys</value>
+  </data>
+  <data name="labelDesfireDefaultKeysSection" xml:space="preserve">
+    <value>DESFire Default Keys</value>
+  </data>
+  <data name="labelClassicDefaultKeysSection" xml:space="preserve">
+    <value>MIFARE Classic Quick-Check Keys</value>
+  </data>
+  <data name="labelQuickCheckKeyPiccMaster" xml:space="preserve">
+    <value>PICC Master Key</value>
+  </data>
+  <data name="labelQuickCheckKeyAppMaster" xml:space="preserve">
+    <value>Application Master Key</value>
+  </data>
+  <data name="labelQuickCheckKeyRead" xml:space="preserve">
+    <value>Read Key</value>
+  </data>
+  <data name="labelQuickCheckKeyWrite" xml:space="preserve">
+    <value>Write Key</value>
+  </data>
+  <data name="labelQuickCheckKeyEncType" xml:space="preserve">
+    <value>Encryption</value>
+  </data>
+  <data name="checkBoxDoNotAskAgain" xml:space="preserve">
+    <value>Do not ask again</value>
+  </data>
+  <data name="checkBoxPromptForKeysBeforeQuickCheck" xml:space="preserve">
+    <value>Ask for keys before Quick Check</value>
+  </data>
+  <data name="tabPageDefaultKeysCaption" xml:space="preserve">
+    <value>Default Keys</value>
   </data>
 </root>

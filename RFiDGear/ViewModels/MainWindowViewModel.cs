@@ -1413,6 +1413,21 @@ namespace RFiDGear.ViewModel
             userIsNotifiedForAvailableUpdate = false;
 
             await updateNotifier.TriggerUpdateCheckAsync(() => AskForUpdateNow());
+
+            if (!updater.UpdateAvailable)
+            {
+                await Application.Current.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new Action(() =>
+                {
+                    Dialogs.Add(new MessageBoxViewModel
+                    {
+                        ParentWindow = mw,
+                        Caption = ResourceLoader.GetResource("messageBoxNoUpdateAvailableCaption"),
+                        Message = ResourceLoader.GetResource("messageBoxNoUpdateAvailableMessage"),
+                        Buttons = MessageBoxButton.OK,
+                        Image = MessageBoxImage.Information
+                    });
+                }));
+            }
         }
 
         /// <summary>

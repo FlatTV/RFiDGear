@@ -19,6 +19,7 @@ using System.Linq;
 using RFiDGear.Infrastructure;
 using RFiDGear.Infrastructure.ReaderProviders;
 using RFiDGear.Infrastructure.FileAccess;
+using RFiDGear.Models;
 using RFiDGear.UI.MVVMDialogs.ViewModels.Interfaces;
 
 namespace RFiDGear.ViewModel
@@ -51,6 +52,11 @@ namespace RFiDGear.ViewModel
             CheckOnStart = settingsReaderWriter.DefaultSpecification.AutoCheckForUpdates;
             SelectedBaudRate = settingsReaderWriter.DefaultSpecification.LastUsedBaudRate;
 
+            // Load Classic keys into local editable collection
+            _classicKeysCollection = new ObservableCollection<string>(
+                settingsReaderWriter.DefaultSpecification.MifareClassicDefaultQuickCheckKeys
+                    ?? new List<string>());
+
             RefreshAvailableReaders();
         }
 
@@ -61,7 +67,14 @@ namespace RFiDGear.ViewModel
         public IAsyncRelayCommand SaveSettings => new AsyncRelayCommand(OnNewSaveSettingsCommand);
         private async Task OnNewSaveSettingsCommand()
         {
+            SyncSettingsBeforeSave();
             await settingsReaderWriter.SaveSettings();
+        }
+
+        private void SyncSettingsBeforeSave()
+        {
+            settingsReaderWriter.DefaultSpecification.MifareClassicDefaultQuickCheckKeys =
+                _classicKeysCollection.ToList();
         }
 
         public ICommand ReaderSeletedCommand => new RelayCommand(ReaderSelected);
@@ -377,6 +390,178 @@ namespace RFiDGear.ViewModel
             }
         }
         private bool checkOnStart;
+
+        #region Default Keys
+
+        public bool PromptForKeysBeforeQuickCheck
+        {
+            get => settingsReaderWriter.DefaultSpecification.PromptForKeysBeforeQuickCheck;
+            set
+            {
+                settingsReaderWriter.DefaultSpecification.PromptForKeysBeforeQuickCheck = value;
+                OnPropertyChanged(nameof(PromptForKeysBeforeQuickCheck));
+            }
+        }
+
+        public string PiccMasterKeyValue
+        {
+            get => GetDesfireKey(KeyType_MifareDesFireKeyType.DefaultDesfireCardCardMasterKey)?.Key ?? string.Empty;
+            set
+            {
+                SetDesfireKeyValue(KeyType_MifareDesFireKeyType.DefaultDesfireCardCardMasterKey, value);
+                IsValidPiccMasterKeyValue = string.IsNullOrEmpty(value) ? (bool?)null
+                    : CustomConverter.IsInHexFormat(value) && value.Length == 32;
+            }
+        }
+
+        public bool? IsValidPiccMasterKeyValue
+        {
+            get => _isValidPiccMasterKeyValue;
+            set { _isValidPiccMasterKeyValue = value; OnPropertyChanged(nameof(IsValidPiccMasterKeyValue)); }
+        }
+        private bool? _isValidPiccMasterKeyValue;
+
+        public DESFireKeyType PiccMasterKeyEncType
+        {
+            get => GetDesfireKey(KeyType_MifareDesFireKeyType.DefaultDesfireCardCardMasterKey)?.EncryptionType ?? DESFireKeyType.DF_KEY_DES;
+            set => SetDesfireKeyEncType(KeyType_MifareDesFireKeyType.DefaultDesfireCardCardMasterKey, value);
+        }
+
+        public string AppMasterKeyValue
+        {
+            get => GetDesfireKey(KeyType_MifareDesFireKeyType.DefaultDesfireCardApplicationMasterKey)?.Key ?? string.Empty;
+            set
+            {
+                SetDesfireKeyValue(KeyType_MifareDesFireKeyType.DefaultDesfireCardApplicationMasterKey, value);
+                IsValidAppMasterKeyValue = string.IsNullOrEmpty(value) ? (bool?)null
+                    : CustomConverter.IsInHexFormat(value) && value.Length == 32;
+            }
+        }
+
+        public bool? IsValidAppMasterKeyValue
+        {
+            get => _isValidAppMasterKeyValue;
+            set { _isValidAppMasterKeyValue = value; OnPropertyChanged(nameof(IsValidAppMasterKeyValue)); }
+        }
+        private bool? _isValidAppMasterKeyValue;
+
+        public DESFireKeyType AppMasterKeyEncType
+        {
+            get => GetDesfireKey(KeyType_MifareDesFireKeyType.DefaultDesfireCardApplicationMasterKey)?.EncryptionType ?? DESFireKeyType.DF_KEY_AES;
+            set => SetDesfireKeyEncType(KeyType_MifareDesFireKeyType.DefaultDesfireCardApplicationMasterKey, value);
+        }
+
+        public string ReadKeyValue
+        {
+            get => GetDesfireKey(KeyType_MifareDesFireKeyType.DefaultDesfireCardReadKey)?.Key ?? string.Empty;
+            set
+            {
+                SetDesfireKeyValue(KeyType_MifareDesFireKeyType.DefaultDesfireCardReadKey, value);
+                IsValidReadKeyValue = string.IsNullOrEmpty(value) ? (bool?)null
+                    : CustomConverter.IsInHexFormat(value) && value.Length == 32;
+            }
+        }
+
+        public bool? IsValidReadKeyValue
+        {
+            get => _isValidReadKeyValue;
+            set { _isValidReadKeyValue = value; OnPropertyChanged(nameof(IsValidReadKeyValue)); }
+        }
+        private bool? _isValidReadKeyValue;
+
+        public DESFireKeyType ReadKeyEncType
+        {
+            get => GetDesfireKey(KeyType_MifareDesFireKeyType.DefaultDesfireCardReadKey)?.EncryptionType ?? DESFireKeyType.DF_KEY_AES;
+            set => SetDesfireKeyEncType(KeyType_MifareDesFireKeyType.DefaultDesfireCardReadKey, value);
+        }
+
+        public string WriteKeyValue
+        {
+            get => GetDesfireKey(KeyType_MifareDesFireKeyType.DefaultDesfireCardWriteKey)?.Key ?? string.Empty;
+            set
+            {
+                SetDesfireKeyValue(KeyType_MifareDesFireKeyType.DefaultDesfireCardWriteKey, value);
+                IsValidWriteKeyValue = string.IsNullOrEmpty(value) ? (bool?)null
+                    : CustomConverter.IsInHexFormat(value) && value.Length == 32;
+            }
+        }
+
+        public bool? IsValidWriteKeyValue
+        {
+            get => _isValidWriteKeyValue;
+            set { _isValidWriteKeyValue = value; OnPropertyChanged(nameof(IsValidWriteKeyValue)); }
+        }
+        private bool? _isValidWriteKeyValue;
+
+        public DESFireKeyType WriteKeyEncType
+        {
+            get => GetDesfireKey(KeyType_MifareDesFireKeyType.DefaultDesfireCardWriteKey)?.EncryptionType ?? DESFireKeyType.DF_KEY_AES;
+            set => SetDesfireKeyEncType(KeyType_MifareDesFireKeyType.DefaultDesfireCardWriteKey, value);
+        }
+
+        public IEnumerable<DESFireKeyType> AvailableEncryptionTypes { get; } =
+            (DESFireKeyType[])Enum.GetValues(typeof(DESFireKeyType));
+
+        public string ClassicKeysText
+        {
+            get => string.Join(", ", _classicKeysCollection);
+            set
+            {
+                var allValid = true;
+                var hasAny = false;
+                _classicKeysCollection.Clear();
+                if (value != null)
+                {
+                    foreach (var entry in value.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries))
+                    {
+                        var trimmed = entry.Trim();
+                        if (trimmed.Length == 0) continue;
+                        hasAny = true;
+                        if (CustomConverter.IsInHexFormat(trimmed) && trimmed.Length == 12)
+                            _classicKeysCollection.Add(trimmed);
+                        else
+                            allValid = false;
+                    }
+                }
+                IsValidClassicKeysText = hasAny ? allValid : (bool?)null;
+                OnPropertyChanged(nameof(ClassicKeysText));
+            }
+        }
+
+        public bool? IsValidClassicKeysText
+        {
+            get => _isValidClassicKeysText;
+            set { _isValidClassicKeysText = value; OnPropertyChanged(nameof(IsValidClassicKeysText)); }
+        }
+        private bool? _isValidClassicKeysText;
+        private readonly ObservableCollection<string> _classicKeysCollection;
+
+        private MifareDesfireDefaultKeys? GetDesfireKey(KeyType_MifareDesFireKeyType keyType)
+        {
+            var list = settingsReaderWriter.DefaultSpecification.MifareDesfireDefaultSecuritySettings;
+            var idx = list?.FindIndex(k => k.KeyType == keyType) ?? -1;
+            return idx >= 0 ? list[idx] : (MifareDesfireDefaultKeys?)null;
+        }
+
+        private void SetDesfireKeyValue(KeyType_MifareDesFireKeyType keyType, string value)
+        {
+            var list = settingsReaderWriter.DefaultSpecification.MifareDesfireDefaultSecuritySettings;
+            var idx = list.FindIndex(k => k.KeyType == keyType);
+            var existing = idx >= 0 ? list[idx] : new MifareDesfireDefaultKeys(keyType, DESFireKeyType.DF_KEY_AES, string.Empty);
+            var updated = new MifareDesfireDefaultKeys(keyType, existing.EncryptionType, value);
+            if (idx >= 0) list[idx] = updated; else list.Add(updated);
+        }
+
+        private void SetDesfireKeyEncType(KeyType_MifareDesFireKeyType keyType, DESFireKeyType encType)
+        {
+            var list = settingsReaderWriter.DefaultSpecification.MifareDesfireDefaultSecuritySettings;
+            var idx = list.FindIndex(k => k.KeyType == keyType);
+            var existing = idx >= 0 ? list[idx] : new MifareDesfireDefaultKeys(keyType, encType, string.Empty);
+            var updated = new MifareDesfireDefaultKeys(keyType, encType, existing.Key);
+            if (idx >= 0) list[idx] = updated; else list.Add(updated);
+        }
+
+        #endregion Default Keys
 
         #region IUserDialogViewModel Implementation
 
