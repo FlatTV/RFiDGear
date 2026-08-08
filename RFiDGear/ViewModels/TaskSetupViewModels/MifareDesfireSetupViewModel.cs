@@ -2475,7 +2475,7 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
 
                     StatusText = string.Format("{0}: {1}\n", DateTime.Now, ResourceLoader.GetResource("textBoxStatusTextBoxDllLoaded"));
 
-                    if (IsValidMifareDesfireKeyString(DesfireReadKeyCurrent, SelectedDesfireReadKeyEncryptionType))
+                    if (IsValidDesfireKeyValue(DesfireReadKeyCurrent, SelectedDesfireReadKeyEncryptionType))
                     {
                         if (IsValidAppNumberNew == false)
                         {

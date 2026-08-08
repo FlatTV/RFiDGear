@@ -1060,7 +1060,8 @@ namespace RFiDGear.Infrastructure.ReaderProviders
         }
 
         /// <inheritdoc />
-        public async override Task<ERROR> DeleteMifareDesfireApplication(string _applicationMasterKey, DESFireKeyType _keyTypePiccMasterKey, uint _appID)
+        public async override Task<ERROR> DeleteMifareDesfireApplication(string _applicationMasterKey, DESFireKeyType _keyTypePiccMasterKey, uint _appID, bool authenticateToPICCFirst = true,
+            string _applicationOwnMasterKey = null, DESFireKeyType? _applicationOwnMasterKeyType = null)
         {
             await _comPortLock.WaitAsync();
             try

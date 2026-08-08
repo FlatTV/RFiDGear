@@ -1743,6 +1743,7 @@ https://github.com/c3rebro/rfidgear</value>
   </data>
   <data name="tooltipAppIdHexInput" xml:space="preserve">
     <value>Decimal (e.g. 5) or hex with 0x prefix (e.g. 0x000005), range 0x000000 to 0xFFFFFF</value>
+  </data>
   <data name="windowCaptionQuickCheckKeys" xml:space="preserve">
     <value>Configure Quick-Check Keys</value>
   </data>

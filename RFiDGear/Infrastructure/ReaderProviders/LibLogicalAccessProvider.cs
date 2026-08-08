@@ -1852,13 +1852,10 @@ namespace RFiDGear.Infrastructure.ReaderProviders
                 // directly to the target application with its own master key - which is frequently
                 // different from the PICC master key above. Fall back to reusing the PICC key only
                 // when no distinct application key was supplied, to preserve old call sites' behavior.
-                DESFireAccessInfo aiAppOwnKey = aiToUse;
+                var appOwnKey = masterKey;
                 if (!string.IsNullOrEmpty(_applicationOwnMasterKey))
                 {
-                    aiAppOwnKey = new DESFireAccessInfo();
-                    CustomConverter.FormatMifareDesfireKeyStringWithSpacesEachByte(_applicationOwnMasterKey);
-                    aiAppOwnKey.masterCardKey.fromString(CustomConverter.DesfireKeyToCheck);
-                    aiAppOwnKey.masterCardKey.setKeyType((LibLogicalAccess.Card.DESFireKeyType)(_applicationOwnMasterKeyType ?? _keyType));
+                    appOwnKey = MakeDesfireKey((LibLogicalAccess.Card.DESFireKeyType)(_applicationOwnMasterKeyType ?? _keyType), _applicationOwnMasterKey);
                 }
 
                 if (await tryInitReader())
