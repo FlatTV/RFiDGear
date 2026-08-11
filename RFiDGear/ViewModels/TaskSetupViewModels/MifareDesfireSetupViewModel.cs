@@ -843,6 +843,10 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
                     case TaskType_MifareDesfireTask.WriteData:
                         SetTabAvailability(true, true, false, false, true, true, false);
                         break;
+
+                    case TaskType_MifareDesfireTask.ChangeFileSettings:
+                        SetTabAvailability(true, false, false, false, true, true, false);
+                        break;
                 }
                 OnPropertyChanged(nameof(SelectedTaskType));
                 OnPropertyChanged(nameof(IsFormatTaskSelected));
@@ -858,6 +862,7 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
                 OnPropertyChanged(nameof(ShowAppKeyOldInputs));
                 OnPropertyChanged(nameof(ShowFileAccessRights));
                 OnPropertyChanged(nameof(ShowFileAuthoringCommands));
+                OnPropertyChanged(nameof(ShowChangeFileSettingsButton));
 
                 UpdateOldAppKeyDefaults();
             }
@@ -889,7 +894,8 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
         public bool ShowAppKeyTargetSection => SelectedTaskType != TaskType_MifareDesfireTask.CreateFile
                                                && SelectedTaskType != TaskType_MifareDesfireTask.DeleteFile
                                                && SelectedTaskType != TaskType_MifareDesfireTask.ReadData
-                                               && SelectedTaskType != TaskType_MifareDesfireTask.WriteData;
+                                               && SelectedTaskType != TaskType_MifareDesfireTask.WriteData
+                                               && SelectedTaskType != TaskType_MifareDesfireTask.ChangeFileSettings;
 
         /// <summary>
         /// Gets a value indicating whether UI elements for supplying the current application key should be shown.
@@ -920,7 +926,8 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
         [XmlIgnore]
         public bool ShowPiccMasterKeyAuthoringSection => SelectedTaskType != TaskType_MifareDesfireTask.FormatDesfireCard
                                                          && SelectedTaskType != TaskType_MifareDesfireTask.CreateApplication
-                                                         && SelectedTaskType != TaskType_MifareDesfireTask.DeleteApplication;
+                                                         && SelectedTaskType != TaskType_MifareDesfireTask.DeleteApplication
+                                                         && SelectedTaskType != TaskType_MifareDesfireTask.ChangeFileSettings;
 
         /// <summary>
         /// Gets a value indicating whether file access rights controls should be shown.
@@ -932,11 +939,18 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
 
         /// <summary>
         /// Gets a value indicating whether file authoring commands should be shown.
-        /// The create/delete actions are unnecessary when reading or writing file data.
+        /// The create/delete actions are unnecessary when reading or writing file data or when changing file settings.
         /// </summary>
         [XmlIgnore]
         public bool ShowFileAuthoringCommands => SelectedTaskType != TaskType_MifareDesfireTask.ReadData
-                                                 && SelectedTaskType != TaskType_MifareDesfireTask.WriteData;
+                                                 && SelectedTaskType != TaskType_MifareDesfireTask.WriteData
+                                                 && SelectedTaskType != TaskType_MifareDesfireTask.ChangeFileSettings;
+
+        /// <summary>
+        /// Gets a value indicating whether the Change File Settings button should be shown.
+        /// </summary>
+        [XmlIgnore]
+        public bool ShowChangeFileSettingsButton => SelectedTaskType == TaskType_MifareDesfireTask.ChangeFileSettings;
 
         /// <summary>
         /// Gets a value indicating whether application creation inputs should be shown.
@@ -1102,6 +1116,9 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
         public ERROR CurrentTaskErrorLevel { get; set; }
 
         [XmlIgnore]
+        public TaskExecutionState ExecutionState { get; set; } = TaskExecutionState.NotStarted;
+
+        [XmlIgnore]
         public ObservableCollection<TaskAttemptResult> AttemptResults { get; } = new ObservableCollection<TaskAttemptResult>();
 
         #region Key Properties Card Master
@@ -1215,7 +1232,7 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
         private DESFireKeyType selectedDesfireMasterKeyEncryptionTypeCurrent;
 
         /// <summary>
-        /// 
+        ///
         /// </summary>
         public string DesfireMasterKeyCurrent
         {
@@ -1254,7 +1271,7 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
             {
                 var previousType = selectedDesfireMasterKeyEncryptionTypeTarget;
                 selectedDesfireMasterKeyEncryptionTypeTarget = value;
-                OnPropertyChanged(nameof(SelectedDesfireMasterKeyEncryptionTypeCurrent));
+                OnPropertyChanged(nameof(SelectedDesfireMasterKeyEncryptionTypeTarget));
                 DesfireMasterKeyTarget = AdjustDefaultKeyForTypeChange(DesfireMasterKeyTarget, previousType, value);
             }
         }
@@ -1473,18 +1490,19 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
 
         /// <summary>
         /// Expected hex-character length for a DESFire key of the given type
-        /// (DES: 8 bytes/16 chars, 3K3DES: 24 bytes/48 chars, AES: 16 bytes/32 chars).
+        /// (DES: 16 bytes/32 chars - DF_KEY_DES represents the 2K3DES-based "DES" mode used on
+        /// DESFire, not literal 8-byte single DES; matches CustomConverter.GetExpectedKeyHexLength
+        /// and the hardcoded default keys in DefaultSpecificationRuntimeDefaults.cs / ReaderDevice.cs.
+        /// 3K3DES: 24 bytes/48 chars, AES: 16 bytes/32 chars).
         /// </summary>
         private static int GetExpectedKeyHexLength(DESFireKeyType keyType)
         {
             switch (keyType)
             {
-                case DESFireKeyType.DF_KEY_DES:
-                    return 16;
-
                 case DESFireKeyType.DF_KEY_3K3DES:
                     return 48;
 
+                case DESFireKeyType.DF_KEY_DES:
                 case DESFireKeyType.DF_KEY_AES:
                 default:
                     return 32;
@@ -2099,7 +2117,7 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
         /// <summary>
         ///
         /// </summary>
-        public RFiDChipGrandChildLayerViewModel GrandChildNodeViewModel => ChildNodeViewModelTemp.Children.Count > 0 ? ChildNodeViewModelTemp.Children.Single(x => x.DesfireFile != null) : null;
+        public RFiDChipGrandChildLayerViewModel GrandChildNodeViewModel => FindDesfireDataNode(ChildNodeViewModelTemp, FileNumberCurrentAsInt);
 
         /// <summary>
         /// Stores the most recently loaded DESFire data file path for optional refresh operations.
@@ -2450,6 +2468,10 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
                         await OnNewWriteDataCommand();
                         break;
 
+                    case TaskType_MifareDesfireTask.ChangeFileSettings:
+                        await OnNewChangeFileSettingsCommand();
+                        break;
+
                     default:
                         break;
                 }
@@ -2475,7 +2497,7 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
 
                     StatusText = string.Format("{0}: {1}\n", DateTime.Now, ResourceLoader.GetResource("textBoxStatusTextBoxDllLoaded"));
 
-                    if (IsValidDesfireKeyValue(DesfireReadKeyCurrent, SelectedDesfireReadKeyEncryptionType))
+                    if (IsValidDesfireKeyValue(DesfireMasterKeyCurrent, SelectedDesfireMasterKeyEncryptionTypeCurrent))
                     {
                         if (IsValidAppNumberNew == false)
                         {
@@ -2581,6 +2603,11 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
         /// return new RelayCommand<LibLogicalAccessProvider>((_device) => OnNewCreateAppCommand(_device));
         /// </summary>
         public IAsyncRelayCommand CreateFileCommand => new AsyncRelayCommand(OnNewCreateFileCommand);
+
+        /// <summary>
+        /// Gets the command that adds a Change File Settings task using the current file and key configuration.
+        /// </summary>
+        public IAsyncRelayCommand ChangeFileSettingsCommand => new AsyncRelayCommand(OnNewChangeFileSettingsCommand);
         private async Task OnNewCreateFileCommand()
         {
             CurrentTaskErrorLevel = ERROR.Empty;
@@ -2702,7 +2729,7 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
                                 selectedDesfireReadKeyNumberAsInt, AppNumberCurrentAsInt);
 
 
-                        if (IsValidAppNumberNew != false && result == ERROR.NoError)
+                        if (IsValidAppNumberCurrent != false && result == ERROR.NoError)
                         {
                             StatusText += string.Format("{0}: Successfully Authenticated to App {1}\n", DateTime.Now, AppNumberCurrentAsInt);
 
@@ -2909,7 +2936,7 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
                                                                          SelectedDesfireWriteKeyEncryptionType,
                                                                          selectedDesfireWriteKeyNumberAsInt, AppNumberCurrentAsInt);
 
-                        if (IsValidAppNumberNew != false && result == ERROR.NoError)
+                        if (IsValidAppNumberCurrent != false && result == ERROR.NoError)
                         {
                             StatusText += string.Format("{0}: Successfully Authenticated to App {1}\n", DateTime.Now, AppNumberCurrentAsInt);
 
@@ -2936,9 +2963,9 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
                                 }
                             }
 
-                            if (SelectedDesfireFileType == FileType_MifareDesfireFileType.BackupFile && device.GetType() == typeof(ElatecNetProvider))
+                            if (result == ERROR.NoError && SelectedDesfireFileType == FileType_MifareDesfireFileType.BackupFile && device.GetType() == typeof(ElatecNetProvider))
                             {
-                                await device.CommitTransactionAsync();
+                                result = await device.CommitTransactionAsync();
                             }
 
                             if (result == ERROR.NoError)
@@ -3379,8 +3406,8 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
                     var keyNumberForChange = AppNumberCurrentAsInt == 0 ? 0 : selectedDesfireAppKeyNumberCurrentAsInt;
                     var numberOfKeys = AppNumberCurrentAsInt == 0 ? 1 : 15;
 
-                    var isAuthKeyValid = CustomConverter.FormatMifareDesfireKeyStringWithSpacesEachByte(authKeyValue) == KEY_ERROR.NO_ERROR;
-                    var isOldKeyValid = !ShowAppKeyOldInputs || CustomConverter.FormatMifareDesfireKeyStringWithSpacesEachByte(oldKeyForTargetSlot) == KEY_ERROR.NO_ERROR;
+                    var isAuthKeyValid = CustomConverter.FormatMifareDesfireKeyStringWithSpacesEachByte(authKeyValue, SelectedDesfireAppKeyEncryptionTypeCurrent) == KEY_ERROR.NO_ERROR;
+                    var isOldKeyValid = !ShowAppKeyOldInputs || CustomConverter.FormatMifareDesfireKeyStringWithSpacesEachByte(oldKeyForTargetSlot, SelectedDesfireAppKeyEncryptionTypeCurrent) == KEY_ERROR.NO_ERROR;
 
                     if (isAuthKeyValid && isOldKeyValid)
                     {
@@ -3499,7 +3526,7 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
                     {
                         var keySettings = BuildSelectedKeySettings(appId);
 
-                        if (CustomConverter.FormatMifareDesfireKeyStringWithSpacesEachByte(authKey) == KEY_ERROR.NO_ERROR)
+                        if (CustomConverter.FormatMifareDesfireKeyStringWithSpacesEachByte(authKey, authKeyType) == KEY_ERROR.NO_ERROR)
                         {
                             var result = await device.AuthToMifareDesfireApplication(
                                 authKey,
@@ -3863,10 +3890,11 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
 
                     if (IsValidDesfireKeyValue(DesfireAppKeyCurrent, SelectedDesfireAppKeyEncryptionTypeCurrent))
                     {
+                        var authKeyNo = GetAuthKeyNumberForChangeAppKey(AppNumberCurrentAsInt, GetChangeKeyModeForApplication(AppNumberCurrentAsInt), selectedDesfireAppKeyNumberCurrentAsInt);
                         var result = await device.AuthToMifareDesfireApplication(
                                 DesfireAppKeyCurrent,
                                 SelectedDesfireAppKeyEncryptionTypeCurrent,
-                                selectedDesfireAppKeyNumberCurrentAsInt,
+                                authKeyNo,
                                 AppNumberCurrentAsInt);
 
                         if (IsValidAppNumberCurrent != false && result == ERROR.NoError)
@@ -4052,6 +4080,50 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
             catch (Exception e)
             {
                 StatusText += string.Format("{0}: Unable to read key version: {1}\n", DateTime.Now, e.Message);
+            }
+        }
+
+        private async Task OnNewChangeFileSettingsCommand()
+        {
+            CurrentTaskErrorLevel = ERROR.Empty;
+
+            accessRights.changeAccess = SelectedDesfireFileAccessRightChange;
+            accessRights.readAccess = SelectedDesfireFileAccessRightRead;
+            accessRights.writeAccess = SelectedDesfireFileAccessRightWrite;
+            accessRights.readAndWriteAccess = SelectedDesfireFileAccessRightReadWrite;
+
+            using (var device = ReaderDevice.Instance)
+            {
+                if (device != null)
+                {
+                    await UpdateReaderStatusCommand.ExecuteAsync(true);
+                    StatusText = string.Format("{0}: {1}\n", DateTime.Now, ResourceLoader.GetResource("textBoxStatusTextBoxDllLoaded"));
+
+                    if (CustomConverter.FormatMifareDesfireKeyStringWithSpacesEachByte(DesfireAppKeyCurrent, SelectedDesfireAppKeyEncryptionTypeCurrent) == KEY_ERROR.NO_ERROR)
+                    {
+                        var result = await device.ChangeMifareDesfireFileSettings(
+                            DesfireAppKeyCurrent,
+                            SelectedDesfireAppKeyEncryptionTypeCurrent,
+                            selectedDesfireAppKeyNumberCurrentAsInt,
+                            accessRights,
+                            SelectedDesfireFileCryptoMode,
+                            AppNumberCurrentAsInt,
+                            FileNumberCurrentAsInt);
+
+                        if (await SetOperationResultAsync(
+                                result,
+                                "{0}: Successfully Changed File Settings for FileNo: {1} in AppID: {2}\n",
+                                new object[] { DateTime.Now, FileNumberCurrentAsInt, AppNumberCurrentAsInt },
+                                "{0}: Unable to Change File Settings for FileNo: {1} in AppID: {2}: {3}\n",
+                                new object[] { DateTime.Now, FileNumberCurrentAsInt, AppNumberCurrentAsInt, result.ToString() }))
+                            return;
+                    }
+                }
+                else
+                {
+                    CurrentTaskErrorLevel = ERROR.TransportError;
+                    await UpdateReaderStatusCommand.ExecuteAsync(false);
+                }
             }
         }
 

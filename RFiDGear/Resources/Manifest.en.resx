@@ -262,6 +262,9 @@ slot of an available reader</value>
   <data name="ENUM.TaskType_MifareDesfireTask.ChangeDefault" xml:space="preserve">
     <value>Change Default Values</value>
   </data>
+  <data name="ENUM.TaskType_MifareDesfireTask.ChangeFileSettings" xml:space="preserve">
+    <value>Change File Settings</value>
+  </data>
   <data name="ENUM.TaskType_MifareDesfireTask.WriteData" xml:space="preserve">
     <value>Write Data</value>
   </data>
@@ -790,6 +793,9 @@ Needed by:
   <data name="labelContentMifareDesfireAppKey" xml:space="preserve">
     <value>Application Key</value>
   </data>
+  <data name="labelContentMifareDesfireAppMasterKey" xml:space="preserve">
+    <value>App Master Key</value>
+  </data>
   <data name="toolTipMifareDesfireAppKeyPolicy" xml:space="preserve">
     <value>Policy=MK → enter key 0 (master key) value. Policy=KeyNo → enter key N value.</value>
   </data>
@@ -833,6 +839,9 @@ Recommended Setting (FOR PICC LAYER ONLY)</value>
   </data>
   <data name="buttonContentMifareDesfireFileMasteringCreateFile" xml:space="preserve">
     <value>Create File</value>
+  </data>
+  <data name="buttonContentMifareDesfireFileMasteringChangeFileSettings" xml:space="preserve">
+    <value>Change File Settings</value>
   </data>
   <data name="buttonContentMifareDesfireFileMasteringDeleteFile" xml:space="preserve">
     <value>Delete File</value>
@@ -1681,6 +1690,12 @@ https://github.com/c3rebro/rfidgear</value>
   <data name="statusHeaderReaderIsUnknown" xml:space="preserve">
     <value>UNKNOWN</value>
   </data>
+  <data name="messageBoxInvalidClassicKeysCaption" xml:space="preserve">
+    <value>Invalid Key</value>
+  </data>
+  <data name="messageBoxInvalidClassicKeysMessage" xml:space="preserve">
+    <value>One or more Classic keys are invalid. Each key must be exactly 12 hex characters (e.g. FFFFFFFFFFFF). Please correct the highlighted entry before saving.</value>
+  </data>
   <data name="messageBoxNoReaderFoundCaption" xml:space="preserve">
     <value>ReaderError</value>
   </data>
@@ -1776,5 +1791,8 @@ https://github.com/c3rebro/rfidgear</value>
   </data>
   <data name="tabPageDefaultKeysCaption" xml:space="preserve">
     <value>Default Keys</value>
+  </data>
+  <data name="menuItemReadAppWithKey" xml:space="preserve">
+    <value>Read App with Key…</value>
   </data>
 </root>

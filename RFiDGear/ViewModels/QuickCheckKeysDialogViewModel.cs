@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.Input;
 
 using RFiDGear.Infrastructure;
 using RFiDGear.Models;
+using RFiDGear.UI.MVVMDialogs.ViewModels;
 using RFiDGear.UI.MVVMDialogs.ViewModels.Interfaces;
 
 using System;
@@ -15,32 +16,50 @@ namespace RFiDGear.ViewModel
 {
     public class QuickCheckKeysDialogViewModel : ObservableObject, IUserDialogViewModel
     {
-        public QuickCheckKeysDialogViewModel(DefaultSpecification spec)
+        private readonly ObservableCollection<IDialogViewModel> _dialogs;
+
+        public QuickCheckKeysDialogViewModel(DefaultSpecification spec, ObservableCollection<IDialogViewModel> dialogs = null)
         {
             var desfireKeys = spec?.MifareDesfireDefaultSecuritySettings
                 ?? new List<MifareDesfireDefaultKeys>();
 
             var picc = desfireKeys.FirstOrDefault(k => k.KeyType == KeyType_MifareDesFireKeyType.DefaultDesfireCardCardMasterKey);
-            PiccMasterKeyValue = picc.Key ?? string.Empty;
             PiccMasterKeyEncType = picc.EncryptionType;
+            PiccMasterKeyValue = picc.Key ?? string.Empty;
 
             var app = desfireKeys.FirstOrDefault(k => k.KeyType == KeyType_MifareDesFireKeyType.DefaultDesfireCardApplicationMasterKey);
-            AppMasterKeyValue = app.Key ?? string.Empty;
             AppMasterKeyEncType = app.EncryptionType;
+            AppMasterKeyValue = app.Key ?? string.Empty;
 
             var read = desfireKeys.FirstOrDefault(k => k.KeyType == KeyType_MifareDesFireKeyType.DefaultDesfireCardReadKey);
-            ReadKeyValue = read.Key ?? string.Empty;
             ReadKeyEncType = read.EncryptionType;
+            ReadKeyValue = read.Key ?? string.Empty;
 
             var write = desfireKeys.FirstOrDefault(k => k.KeyType == KeyType_MifareDesFireKeyType.DefaultDesfireCardWriteKey);
-            WriteKeyValue = write.Key ?? string.Empty;
             WriteKeyEncType = write.EncryptionType;
+            WriteKeyValue = write.Key ?? string.Empty;
 
             ClassicQuickCheckKeys = new ObservableCollection<string>(
                 spec?.MifareClassicDefaultQuickCheckKeys ?? new List<string>());
+            _classicKeysRawText = string.Join(", ", ClassicQuickCheckKeys);
+
+            _dialogs = dialogs;
         }
 
         #region DESFire Keys
+
+        public DESFireKeyType PiccMasterKeyEncType
+        {
+            get => _piccMasterKeyEncType;
+            set
+            {
+                _piccMasterKeyEncType = value;
+                OnPropertyChanged();
+                IsValidPiccMasterKeyValue = string.IsNullOrEmpty(_piccMasterKeyValue) ? (bool?)null
+                    : CustomConverter.IsInHexFormat(_piccMasterKeyValue) && _piccMasterKeyValue.Length == CustomConverter.GetExpectedKeyHexLength(value);
+            }
+        }
+        private DESFireKeyType _piccMasterKeyEncType;
 
         public string PiccMasterKeyValue
         {
@@ -49,7 +68,7 @@ namespace RFiDGear.ViewModel
             {
                 _piccMasterKeyValue = value;
                 IsValidPiccMasterKeyValue = string.IsNullOrEmpty(value) ? (bool?)null
-                    : CustomConverter.IsInHexFormat(value) && value.Length == 32;
+                    : CustomConverter.IsInHexFormat(value) && value.Length == CustomConverter.GetExpectedKeyHexLength(_piccMasterKeyEncType);
                 OnPropertyChanged();
             }
         }
@@ -62,12 +81,18 @@ namespace RFiDGear.ViewModel
         }
         private bool? _isValidPiccMasterKeyValue;
 
-        public DESFireKeyType PiccMasterKeyEncType
+        public DESFireKeyType AppMasterKeyEncType
         {
-            get => _piccMasterKeyEncType;
-            set { _piccMasterKeyEncType = value; OnPropertyChanged(); }
+            get => _appMasterKeyEncType;
+            set
+            {
+                _appMasterKeyEncType = value;
+                OnPropertyChanged();
+                IsValidAppMasterKeyValue = string.IsNullOrEmpty(_appMasterKeyValue) ? (bool?)null
+                    : CustomConverter.IsInHexFormat(_appMasterKeyValue) && _appMasterKeyValue.Length == CustomConverter.GetExpectedKeyHexLength(value);
+            }
         }
-        private DESFireKeyType _piccMasterKeyEncType;
+        private DESFireKeyType _appMasterKeyEncType;
 
         public string AppMasterKeyValue
         {
@@ -76,7 +101,7 @@ namespace RFiDGear.ViewModel
             {
                 _appMasterKeyValue = value;
                 IsValidAppMasterKeyValue = string.IsNullOrEmpty(value) ? (bool?)null
-                    : CustomConverter.IsInHexFormat(value) && value.Length == 32;
+                    : CustomConverter.IsInHexFormat(value) && value.Length == CustomConverter.GetExpectedKeyHexLength(_appMasterKeyEncType);
                 OnPropertyChanged();
             }
         }
@@ -89,12 +114,18 @@ namespace RFiDGear.ViewModel
         }
         private bool? _isValidAppMasterKeyValue;
 
-        public DESFireKeyType AppMasterKeyEncType
+        public DESFireKeyType ReadKeyEncType
         {
-            get => _appMasterKeyEncType;
-            set { _appMasterKeyEncType = value; OnPropertyChanged(); }
+            get => _readKeyEncType;
+            set
+            {
+                _readKeyEncType = value;
+                OnPropertyChanged();
+                IsValidReadKeyValue = string.IsNullOrEmpty(_readKeyValue) ? (bool?)null
+                    : CustomConverter.IsInHexFormat(_readKeyValue) && _readKeyValue.Length == CustomConverter.GetExpectedKeyHexLength(value);
+            }
         }
-        private DESFireKeyType _appMasterKeyEncType;
+        private DESFireKeyType _readKeyEncType;
 
         public string ReadKeyValue
         {
@@ -103,7 +134,7 @@ namespace RFiDGear.ViewModel
             {
                 _readKeyValue = value;
                 IsValidReadKeyValue = string.IsNullOrEmpty(value) ? (bool?)null
-                    : CustomConverter.IsInHexFormat(value) && value.Length == 32;
+                    : CustomConverter.IsInHexFormat(value) && value.Length == CustomConverter.GetExpectedKeyHexLength(_readKeyEncType);
                 OnPropertyChanged();
             }
         }
@@ -116,12 +147,18 @@ namespace RFiDGear.ViewModel
         }
         private bool? _isValidReadKeyValue;
 
-        public DESFireKeyType ReadKeyEncType
+        public DESFireKeyType WriteKeyEncType
         {
-            get => _readKeyEncType;
-            set { _readKeyEncType = value; OnPropertyChanged(); }
+            get => _writeKeyEncType;
+            set
+            {
+                _writeKeyEncType = value;
+                OnPropertyChanged();
+                IsValidWriteKeyValue = string.IsNullOrEmpty(_writeKeyValue) ? (bool?)null
+                    : CustomConverter.IsInHexFormat(_writeKeyValue) && _writeKeyValue.Length == CustomConverter.GetExpectedKeyHexLength(value);
+            }
         }
-        private DESFireKeyType _readKeyEncType;
+        private DESFireKeyType _writeKeyEncType;
 
         public string WriteKeyValue
         {
@@ -130,7 +167,7 @@ namespace RFiDGear.ViewModel
             {
                 _writeKeyValue = value;
                 IsValidWriteKeyValue = string.IsNullOrEmpty(value) ? (bool?)null
-                    : CustomConverter.IsInHexFormat(value) && value.Length == 32;
+                    : CustomConverter.IsInHexFormat(value) && value.Length == CustomConverter.GetExpectedKeyHexLength(_writeKeyEncType);
                 OnPropertyChanged();
             }
         }
@@ -143,13 +180,6 @@ namespace RFiDGear.ViewModel
         }
         private bool? _isValidWriteKeyValue;
 
-        public DESFireKeyType WriteKeyEncType
-        {
-            get => _writeKeyEncType;
-            set { _writeKeyEncType = value; OnPropertyChanged(); }
-        }
-        private DESFireKeyType _writeKeyEncType;
-
         #endregion DESFire Keys
 
         #region Classic Keys
@@ -157,17 +187,19 @@ namespace RFiDGear.ViewModel
         public ObservableCollection<string> ClassicQuickCheckKeys { get; }
 
         /// <summary>
-        /// Newline-separated representation of <see cref="ClassicQuickCheckKeys"/> for direct TextBox binding.
-        /// Each line is one hex key (12 chars). Setter re-parses and updates the collection.
+        /// Comma-separated representation of the Classic quick-check keys for direct TextBox binding.
+        /// The setter validates the raw text and updates <see cref="IsValidClassicKeysText"/> without
+        /// modifying <see cref="ClassicQuickCheckKeys"/>; the collection is only rebuilt at save time
+        /// so that partial edits (temporarily invalid entries) are not stripped while the user is typing.
         /// </summary>
         public string ClassicKeysText
         {
-            get => string.Join(", ", ClassicQuickCheckKeys);
+            get => _classicKeysRawText;
             set
             {
+                _classicKeysRawText = value ?? string.Empty;
                 var allValid = true;
                 var hasAny = false;
-                ClassicQuickCheckKeys.Clear();
                 if (value != null)
                 {
                     foreach (var entry in value.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries))
@@ -175,9 +207,7 @@ namespace RFiDGear.ViewModel
                         var trimmed = entry.Trim();
                         if (trimmed.Length == 0) continue;
                         hasAny = true;
-                        if (CustomConverter.IsInHexFormat(trimmed) && trimmed.Length == 12)
-                            ClassicQuickCheckKeys.Add(trimmed);
-                        else
+                        if (!CustomConverter.IsInHexFormat(trimmed) || trimmed.Length != 12)
                             allValid = false;
                     }
                 }
@@ -185,6 +215,7 @@ namespace RFiDGear.ViewModel
                 OnPropertyChanged();
             }
         }
+        private string _classicKeysRawText;
 
         public bool? IsValidClassicKeysText
         {
@@ -217,7 +248,14 @@ namespace RFiDGear.ViewModel
             UpdateOrAddKey(keys, KeyType_MifareDesFireKeyType.DefaultDesfireCardReadKey, ReadKeyValue, ReadKeyEncType);
             UpdateOrAddKey(keys, KeyType_MifareDesFireKeyType.DefaultDesfireCardWriteKey, WriteKeyValue, WriteKeyEncType);
 
-            spec.MifareClassicDefaultQuickCheckKeys = ClassicQuickCheckKeys.ToList();
+            var classicKeys = new List<string>();
+            foreach (var entry in (_classicKeysRawText ?? string.Empty).Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries))
+            {
+                var trimmed = entry.Trim();
+                if (CustomConverter.IsInHexFormat(trimmed) && trimmed.Length == 12)
+                    classicKeys.Add(trimmed);
+            }
+            spec.MifareClassicDefaultQuickCheckKeys = classicKeys;
         }
 
         private static void UpdateOrAddKey(List<MifareDesfireDefaultKeys> keys, KeyType_MifareDesFireKeyType keyType, string value, DESFireKeyType encType)
@@ -260,7 +298,21 @@ namespace RFiDGear.ViewModel
         public ICommand OkCommand => new RelayCommand(Ok);
         public ICommand CancelCommand => new RelayCommand(Cancel);
 
-        private void Ok() => OnOk?.Invoke(this);
+        private void Ok()
+        {
+            if (IsValidClassicKeysText == false)
+            {
+                _dialogs?.Add(new CustomDialogViewModel
+                {
+                    Caption = ResourceLoader.GetResource("messageBoxInvalidClassicKeysCaption"),
+                    Message = ResourceLoader.GetResource("messageBoxInvalidClassicKeysMessage"),
+                    OnOk = sender => sender.Close()
+                });
+                return;
+            }
+            OnOk?.Invoke(this);
+        }
+
         private void Cancel() => OnCancel?.Invoke(this);
 
         #endregion IUserDialogViewModel

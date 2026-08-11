@@ -320,7 +320,7 @@ namespace RFiDGear.ViewModel
 
             var tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
 
-            var dlg = new QuickCheckKeysDialogViewModel(settings.DefaultSpecification)
+            var dlg = new QuickCheckKeysDialogViewModel(settings.DefaultSpecification, dialogs)
             {
                 Caption = ResourceLoader.GetResource("windowCaptionQuickCheckKeys"),
 
@@ -515,6 +515,9 @@ namespace RFiDGear.ViewModel
                         {
                             if (appIDs != null)
                             {
+                                var defaultAppKey = settings.DefaultSpecification.MifareDesfireDefaultSecuritySettings
+                                    .First(x => x.KeyType == KeyType_MifareDesFireKeyType.DefaultDesfireCardApplicationMasterKey);
+
                                 foreach (var appID in appIDs)
                                 {
                                     if (appID == 0)
@@ -524,56 +527,11 @@ namespace RFiDGear.ViewModel
 
                                     Children.Add(new RFiDChipChildLayerViewModel(new MifareDesfireAppModel(appID), this, CardType, dialogs));
 
-                                    // GetKeySettings does not require authentication per the DESFire spec, so
-                                    // read without authenticating: apps created with an unknown/foreign key
-                                    // (i.e. anything not made by RFiDGear with its configured default key)
-                                    // still show their key settings instead of silently being skipped below.
-                                    var appSettingsResult = await device.GetMifareDesfireAppSettings(settings.DefaultSpecification.MifareDesfireDefaultSecuritySettings.First(x => x.KeyType == KeyType_MifareDesFireKeyType.DefaultDesfireCardApplicationMasterKey).Key,
-                                                                           settings.DefaultSpecification.MifareDesfireDefaultSecuritySettings.First(x => x.KeyType == KeyType_MifareDesFireKeyType.DefaultDesfireCardApplicationMasterKey).EncryptionType,
-                                                                           0, (int)appID, authenticateBeforeReading: false);
-                                    if (appSettingsResult.Code == ERROR.NoError)
-                                    {
-                                        Children.First(x => x.AppID == appID).Children.Add(new RFiDChipGrandChildLayerViewModel(string.Format("Available Keys: {0}", device.MaxNumberOfAppKeys)));
-                                        Children.First(x => x.AppID == appID).Children.Add(new RFiDChipGrandChildLayerViewModel(string.Format("App Encryption Type: {0}", Enum.GetName(typeof(DESFireKeyType), (device.EncryptionType)))));
-                                        Children.First(x => x.AppID == appID).Children.Add(new RFiDChipGrandChildLayerViewModel(string.Format("Key Settings: {0} (0x{1:X2})", Enum.GetName(typeof(DESFireKeySettings), (device.DesfireAppKeySetting & (DESFireKeySettings)0xF0)), (byte)device.DesfireAppKeySetting)));
-
-                                        Children.First(x => x.AppID == appID).Children.Add(new RFiDChipGrandChildLayerViewModel(string.Format("Allow Change AMK: {0}", (device.DesfireAppKeySetting & (DESFireKeySettings)0x01) == (DESFireKeySettings)0x01 ? "yes" : "no")));
-                                        Children.First(x => x.AppID == appID).Children.Add(new RFiDChipGrandChildLayerViewModel(string.Format("Allow Listing without AMK: {0}", (device.DesfireAppKeySetting & (DESFireKeySettings)0x02) == (DESFireKeySettings)0x02 ? "yes" : "no")));
-                                        Children.First(x => x.AppID == appID).Children.Add(new RFiDChipGrandChildLayerViewModel(string.Format("Allow Create/Delete without AMK: {0}", (device.DesfireAppKeySetting & (DESFireKeySettings)0x04) == (DESFireKeySettings)0x04 ? "yes" : "no")));
-                                        Children.First(x => x.AppID == appID).Children.Add(new RFiDChipGrandChildLayerViewModel(string.Format("Allow Change Config: {0}", (device.DesfireAppKeySetting & (DESFireKeySettings)0x08) == (DESFireKeySettings)0x08 ? "yes" : "no")));
-                                    }
-
-                                    //TODO: add grandchild fileid
-                                    if (await device.GetMifareDesfireFileList(
-                                        settings.DefaultSpecification.MifareDesfireDefaultSecuritySettings.First(x => x.KeyType == KeyType_MifareDesFireKeyType.DefaultDesfireCardApplicationMasterKey).Key,
-                                        settings.DefaultSpecification.MifareDesfireDefaultSecuritySettings.First(x => x.KeyType == KeyType_MifareDesFireKeyType.DefaultDesfireCardApplicationMasterKey).EncryptionType,
-                                        0, (int)appID) == ERROR.NoError)
-                                    {
-                                        foreach (var fileID in device.FileIDList)
-                                        {
-                                            Children.First(x => x.AppID == appID).Children.Add(new RFiDChipGrandChildLayerViewModel(new MifareDesfireFileModel(null, fileID), Children.First(x => x.AppID == appID)));
-
-                                            if (await device.GetMifareDesfireFileSettings(settings.DefaultSpecification.MifareDesfireDefaultSecuritySettings.First(x => x.KeyType == KeyType_MifareDesFireKeyType.DefaultDesfireCardApplicationMasterKey).Key,
-                                                                                    settings.DefaultSpecification.MifareDesfireDefaultSecuritySettings.First(x => x.KeyType == KeyType_MifareDesFireKeyType.DefaultDesfireCardApplicationMasterKey).EncryptionType,
-                                                                                    0, (int)appID, fileID) == ERROR.NoError)
-                                            {
-                                                var grandChild = Children.First(x => x.AppID == appID).Children.First(y => (y.DesfireFile != null ? y.DesfireFile.FileID : -1) == fileID);
-
-                                                grandChild.Children.Add(new RFiDChipGrandGrandChildLayerViewModel(string.Format("FileType: {0}", Enum.GetName(typeof(FileType_MifareDesfireFileType), device.DesfireFileSettings.FileType)), grandChild));
-                                                grandChild.Children.Add(new RFiDChipGrandGrandChildLayerViewModel(string.Format("FileSize: {0}Bytes", device.DesfireFileSettings.dataFile.fileSize.ToString(CultureInfo.CurrentCulture)), grandChild));
-                                                grandChild.Children.Add(new RFiDChipGrandGrandChildLayerViewModel(string.Format("CommMode: {0}", Enum.GetName(typeof(EncryptionMode), device.DesfireFileSettings.comSett)), grandChild));
-                                                // AccessRights is a 2-byte DESFire field, transmitted LSB-first like other
-                                                // multi-byte DESFire fields. Per the NXP spec, across the conceptual
-                                                // MSB->LSB nibble order it's Read|Write|ReadWrite|Change - which lands as:
-                                                // byte[1] high nibble = Read, byte[1] low nibble = Write,
-                                                // byte[0] high nibble = ReadWrite, byte[0] low nibble = Change.
-                                                grandChild.Children.Add(new RFiDChipGrandGrandChildLayerViewModel(string.Format("Read: {0}", Enum.GetName(typeof(TaskAccessRights), (device.DesfireFileSettings.accessRights[1] & 0xF0) >> 4)), grandChild));
-                                                grandChild.Children.Add(new RFiDChipGrandGrandChildLayerViewModel(string.Format("Write: {0}", Enum.GetName(typeof(TaskAccessRights), (device.DesfireFileSettings.accessRights[1] & 0x0F))), grandChild));
-                                                grandChild.Children.Add(new RFiDChipGrandGrandChildLayerViewModel(string.Format("RW: {0}", Enum.GetName(typeof(TaskAccessRights), (device.DesfireFileSettings.accessRights[0] & 0xF0) >> 4)), grandChild));
-                                                grandChild.Children.Add(new RFiDChipGrandGrandChildLayerViewModel(string.Format("Change: {0}", Enum.GetName(typeof(TaskAccessRights), (device.DesfireFileSettings.accessRights[0] & 0x0F))), grandChild));
-                                            }
-                                        }
-                                    }
+                                    await PopulateDesfireAppNodeAsync(
+                                        Children.First(x => x.AppID == appID),
+                                        device,
+                                        defaultAppKey.Key,
+                                        defaultAppKey.EncryptionType);
                                 }
                             }
                             else
@@ -627,6 +585,122 @@ namespace RFiDGear.ViewModel
                 }
             }
 
+        }
+
+        private async Task PopulateDesfireAppNodeAsync(
+            RFiDChipChildLayerViewModel appNode,
+            ReaderDevice device,
+            string keyHex,
+            DESFireKeyType keyType,
+            int keyNo = 0)
+        {
+            appNode.Children.Clear();
+
+            var appID = appNode.AppID.Value;
+
+            // GetKeySettings does not require authentication per the DESFire spec, so
+            // read without authenticating: apps created with an unknown/foreign key
+            // (i.e. anything not made by RFiDGear with its configured default key)
+            // still show their key settings instead of silently being skipped below.
+            var appSettingsResult = await device.GetMifareDesfireAppSettings(keyHex, keyType, keyNo, (int)appID, authenticateBeforeReading: false);
+            if (appSettingsResult.Code == ERROR.NoError)
+            {
+                appNode.Children.Add(new RFiDChipGrandChildLayerViewModel(string.Format("Available Keys: {0}", device.MaxNumberOfAppKeys)));
+                appNode.Children.Add(new RFiDChipGrandChildLayerViewModel(string.Format("App Encryption Type: {0}", Enum.GetName(typeof(DESFireKeyType), device.EncryptionType))));
+                appNode.Children.Add(new RFiDChipGrandChildLayerViewModel(string.Format("Key Settings: {0}", Enum.GetName(typeof(DESFireKeySettings), device.DesfireAppKeySetting & (DESFireKeySettings)0xF0))));
+                appNode.Children.Add(new RFiDChipGrandChildLayerViewModel(string.Format("Allow Change AMK: {0}", (device.DesfireAppKeySetting & (DESFireKeySettings)0x01) == (DESFireKeySettings)0x01 ? "yes" : "no")));
+                appNode.Children.Add(new RFiDChipGrandChildLayerViewModel(string.Format("Allow Listing without AMK: {0}", (device.DesfireAppKeySetting & (DESFireKeySettings)0x02) == (DESFireKeySettings)0x02 ? "yes" : "no")));
+                appNode.Children.Add(new RFiDChipGrandChildLayerViewModel(string.Format("Allow Create/Delete without AMK: {0}", (device.DesfireAppKeySetting & (DESFireKeySettings)0x04) == (DESFireKeySettings)0x04 ? "yes" : "no")));
+                appNode.Children.Add(new RFiDChipGrandChildLayerViewModel(string.Format("Allow Change Config: {0}", (device.DesfireAppKeySetting & (DESFireKeySettings)0x08) == (DESFireKeySettings)0x08 ? "yes" : "no")));
+            }
+
+            if (await device.GetMifareDesfireFileList(keyHex, keyType, keyNo, (int)appID) == ERROR.NoError)
+            {
+                foreach (var fileID in device.FileIDList)
+                {
+                    appNode.Children.Add(new RFiDChipGrandChildLayerViewModel(new MifareDesfireFileModel(null, fileID), appNode));
+
+                    if (await device.GetMifareDesfireFileSettings(keyHex, keyType, keyNo, (int)appID, fileID) == ERROR.NoError)
+                    {
+                        var grandChild = appNode.Children.First(y => (y.DesfireFile != null ? y.DesfireFile.FileID : -1) == fileID);
+
+                        grandChild.Children.Add(new RFiDChipGrandGrandChildLayerViewModel(string.Format("FileType: {0}", Enum.GetName(typeof(FileType_MifareDesfireFileType), device.DesfireFileSettings.FileType)), grandChild));
+                        grandChild.Children.Add(new RFiDChipGrandGrandChildLayerViewModel(string.Format("FileSize: {0}Bytes", device.DesfireFileSettings.dataFile.fileSize.ToString(CultureInfo.CurrentCulture)), grandChild));
+                        grandChild.Children.Add(new RFiDChipGrandGrandChildLayerViewModel(string.Format("CommMode: {0}", Enum.GetName(typeof(EncryptionMode), device.DesfireFileSettings.comSett)), grandChild));
+                        // AccessRights is a 2-byte DESFire field, transmitted LSB-first like other
+                        // multi-byte DESFire fields. Per the NXP spec, across the conceptual
+                        // MSB->LSB nibble order it's Read|Write|ReadWrite|Change - which lands as:
+                        // byte[1] high nibble = Read, byte[1] low nibble = Write,
+                        // byte[0] high nibble = ReadWrite, byte[0] low nibble = Change.
+                        grandChild.Children.Add(new RFiDChipGrandGrandChildLayerViewModel(string.Format("Read: {0}", Enum.GetName(typeof(TaskAccessRights), (device.DesfireFileSettings.accessRights[1] & 0xF0) >> 4)), grandChild));
+                        grandChild.Children.Add(new RFiDChipGrandGrandChildLayerViewModel(string.Format("Write: {0}", Enum.GetName(typeof(TaskAccessRights), (device.DesfireFileSettings.accessRights[1] & 0x0F))), grandChild));
+                        grandChild.Children.Add(new RFiDChipGrandGrandChildLayerViewModel(string.Format("RW: {0}", Enum.GetName(typeof(TaskAccessRights), (device.DesfireFileSettings.accessRights[0] & 0xF0) >> 4)), grandChild));
+                        grandChild.Children.Add(new RFiDChipGrandGrandChildLayerViewModel(string.Format("Change: {0}", Enum.GetName(typeof(TaskAccessRights), (device.DesfireFileSettings.accessRights[0] & 0x0F))), grandChild));
+                    }
+                }
+            }
+        }
+
+        private async Task<(string keyHex, DESFireKeyType keyType, int keyNo)?> ShowDesfireAppKeyDialogAsync(uint appId)
+        {
+            if (dialogs == null)
+                return null;
+
+            var tcs = new TaskCompletionSource<(string, DESFireKeyType, int)?>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+            var dlg = new DesfireAppKeyDialogViewModel
+            {
+                Caption = string.Format("Read AppID: {0} (0x{1}) with Key", appId, appId.ToString("X8")),
+
+                OnOk = (sender) =>
+                {
+                    sender.Close();
+                    tcs.TrySetResult((sender.AppKeyHex, sender.SelectedKeyType, sender.SelectedKeyNumber));
+                },
+
+                OnCancel = (sender) =>
+                {
+                    sender.Close();
+                    tcs.TrySetResult(null);
+                },
+
+                OnCloseRequest = (sender) =>
+                {
+                    sender.Close();
+                    tcs.TrySetResult(null);
+                }
+            };
+
+            dialogs.Add(dlg);
+            return await tcs.Task;
+        }
+
+        public async Task QuickCheckDesfireAppWithKeyAsync(RFiDChipChildLayerViewModel appNode)
+        {
+            if (appNode?.AppID == null) return;
+
+            var result = await ShowDesfireAppKeyDialogAsync(appNode.AppID.Value);
+            if (result == null) return;
+
+            var (keyHex, keyType, keyNo) = result.Value;
+
+            using (await desfireQuickCheckLock.AcquireAsync())
+            {
+                using (var device = ReaderDevice.Instance)
+                {
+                    if (device == null) return;
+                    Mouse.OverrideCursor = Cursors.AppStarting;
+                    try
+                    {
+                        await PopulateDesfireAppNodeAsync(appNode, device, keyHex, keyType, keyNo);
+                        appNode.IsExpanded = true;
+                    }
+                    finally
+                    {
+                        Mouse.OverrideCursor = null;
+                    }
+                }
+            }
         }
 
         /// <summary>

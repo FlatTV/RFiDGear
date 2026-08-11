@@ -36,6 +36,7 @@ namespace RFiDGear.ViewModel
         private readonly AsyncRelayCommand _cmdReadSectorWithDefaults;
         private readonly RelayCommand _cmdEditAuthAndModifySector;
         private readonly RelayCommand _cmdReadFilesWithKey;
+        private readonly AsyncRelayCommand _cmdReadAppWithKey;
         private readonly string _parentUid;
 
         //private MifareClassicSetupViewModel setupViewModel;
@@ -137,10 +138,12 @@ namespace RFiDGear.ViewModel
             appModel = appID;
             _cardType = cardType;
             _parentUid = parentUID?.UID;
+            _parent = parentUID;
 
             _cmdReadSectorWithDefaults = new AsyncRelayCommand(ReadSectorWithDefaults);
             _cmdEditAuthAndModifySector = new RelayCommand(ReadSectorWithCustoms);
             _cmdReadFilesWithKey = new RelayCommand(ReadFilesWithKey);
+            _cmdReadAppWithKey = new AsyncRelayCommand(ReadDesfireAppWithKey);
 
             InitializeContextMenuItems(new List<MenuItem>
             {
@@ -148,6 +151,11 @@ namespace RFiDGear.ViewModel
                 {
                     Header = ResourceLoader.GetResource("contextMenuDesfireReadFilesWithKey"),
                     Command = _cmdReadFilesWithKey
+                },
+                new MenuItem
+                {
+                    Header = ResourceLoader.GetResource("menuItemReadAppWithKey"),
+                    Command = _cmdReadAppWithKey
                 }
             });
 
@@ -224,7 +232,7 @@ namespace RFiDGear.ViewModel
         private void InitializeContextMenuItems(List<MenuItem> items)
         {
             var dispatcher = Application.Current?.Dispatcher ?? Dispatcher.CurrentDispatcher;
-            if (dispatcher.CheckAccess())
+            if (dispatcher.CheckAccess() || dispatcher.HasShutdownStarted || dispatcher.HasShutdownFinished)
             {
                 ContextMenuItems = items;
                 return;
@@ -298,6 +306,12 @@ namespace RFiDGear.ViewModel
         }
 
         #endregion Context Menu Items
+
+        private async Task ReadDesfireAppWithKey()
+        {
+            if (_parent != null)
+                await _parent.QuickCheckDesfireAppWithKeyAsync(this);
+        }
 
         #region Dependency Properties
 

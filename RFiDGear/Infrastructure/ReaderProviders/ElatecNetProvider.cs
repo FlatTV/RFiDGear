@@ -1,4 +1,10 @@
 ﻿//using Elatec.NET.Model;
+using ByteArrayHelper.Extensions;
+using Elatec.NET;
+using Elatec.NET.Cards.Mifare;
+using RFiDGear.Infrastructure.Tasks;
+using RFiDGear.Models;
+using Serilog;
 using System;
 using System.Collections.Generic;
 using System.Globalization;
@@ -6,12 +12,7 @@ using System.Linq;
 using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
-using ByteArrayHelper.Extensions;
-using Elatec.NET;
-using RFiDGear.Models;
-using RFiDGear.Infrastructure.Tasks;
-using Elatec.NET.Cards.Mifare;
-using Serilog;
+using static LibLogicalAccess.Card.DESFireCommands;
 
 namespace RFiDGear.Infrastructure.ReaderProviders
 {
@@ -543,7 +544,7 @@ namespace RFiDGear.Infrastructure.ReaderProviders
             }
         }
 
-        private async Task<ERROR> AuthToMifareDesfireApplicationCore(string _applicationMasterKey, DESFireKeyType _keyType, int _keyNumber, int _appID)
+        protected virtual async Task<ERROR> AuthToMifareDesfireApplicationCore(string _applicationMasterKey, DESFireKeyType _keyType, int _keyNumber, int _appID)
         {
             if (readerDevice.IsConnected)
             {
@@ -1060,6 +1061,65 @@ namespace RFiDGear.Infrastructure.ReaderProviders
         }
 
         /// <inheritdoc />
+        public async override Task<ERROR> ChangeMifareDesfireFileSettings(string changeKeyHex, DESFireKeyType changeKeyType, int changeKeyNo, DESFireAccessRights newAccessRights, EncryptionMode newEncMode, int appId = 0, int fileNo = 0)
+        {
+            await _comPortLock.WaitAsync();
+            try
+            {
+                if (readerDevice.IsConnected)
+                {
+                    if (readerDevice.IsTWN4LegicReader)
+                    {
+                        try
+                        {
+                            await readerDevice.SearchTagAsync();
+                        }
+                        catch { }
+                    }
+
+                    try
+                    {
+                        await readerDevice.MifareDesfire_SelectApplicationAsync((uint)appId);
+
+                        await readerDevice.MifareDesfire_AuthenticateAsync(
+                            changeKeyHex,
+                            (byte)changeKeyNo,
+                            (byte)(int)Enum.Parse(typeof(Elatec.NET.Cards.Mifare.DESFireKeyType),
+                            Enum.GetName(typeof(DESFireKeyType), changeKeyType)),
+                            1);
+
+                        var rawSettings = await readerDevice.MifareDesfire_GetFileSettingsAsync((byte)fileNo);
+                        if (rawSettings == null)
+                            return ERROR.AuthFailure;
+
+                        var oldAR = rawSettings.accessRights;
+                        var newAR = BuildDesfireAccessRights(newAccessRights);
+
+                        await readerDevice.MifareDesfire_ChangeFileSettingsAsync(
+                            (byte)fileNo,
+                            (Elatec.NET.Cards.Mifare.EncryptionMode)newEncMode,
+                            oldAR,
+                            newAR);
+
+                        return ERROR.NoError;
+                    }
+                    catch
+                    {
+                        return ERROR.TransportError;
+                    }
+                }
+                else
+                {
+                    return ERROR.TransportError;
+                }
+            }
+            finally
+            {
+                _comPortLock.Release();
+            }
+        }
+
+        /// <inheritdoc />
         public async override Task<ERROR> DeleteMifareDesfireApplication(string _applicationMasterKey, DESFireKeyType _keyTypePiccMasterKey, uint _appID, bool authenticateToPICCFirst = true,
             string _applicationOwnMasterKey = null, DESFireKeyType? _applicationOwnMasterKeyType = null)
         {
@@ -1359,36 +1419,40 @@ namespace RFiDGear.Infrastructure.ReaderProviders
             {
                 try
                 {
-                    if (await AuthToMifareDesfireApplicationCore(_appMasterKey, _keyTypeAppMasterKey, 0, _appID) == ERROR.NoError)
+                    var authResult = await AuthToMifareDesfireApplicationCore(_appMasterKey, _keyTypeAppMasterKey, 0, _appID);
+                    if (authResult != ERROR.NoError)
+                        return authResult;
+
+                    var ar = BuildDesfireAccessRights(_accessRights);
+
+                    switch (_fileType)
                     {
-                        var ar = BuildDesfireAccessRights(_accessRights);
+                        case FileType_MifareDesfireFileType.StdDataFile:
+                            try
+                            {
+                                await CreateStdDataFileAsync((byte)_fileNo, _fileType, _encMode, ar, (uint)_fileSize);
+                            }
+                            catch
+                            {
+                                return ERROR.AuthFailure;
+                            }
 
-                        switch (_fileType)
-                        {
-                            case FileType_MifareDesfireFileType.StdDataFile:
-                                try
-                                {
-                                    await CreateStdDataFileAsync((byte)_fileNo, _fileType, _encMode, ar, (uint)_fileSize);
-                                }
-                                catch
-                                {
-                                    return ERROR.AuthFailure;
-                                }
+                            break;
 
-                                break;
+                        case FileType_MifareDesfireFileType.BackupFile:
+                            try
+                            {
+                                await CreateBackupFileAsync((byte)_fileNo, _encMode, ar, (uint)_fileSize);
+                            }
+                            catch
+                            {
+                                return ERROR.AuthFailure;
+                            }
 
-                            case FileType_MifareDesfireFileType.BackupFile:
-                                try
-                                {
-                                    await CreateBackupFileAsync((byte)_fileNo, _encMode, ar, (uint)_fileSize);
-                                }
-                                catch
-                                {
-                                    return ERROR.AuthFailure;
-                                }
+                            break;
 
-                                break;
-                        }
+                        default:
+                            return ERROR.ProtocolConstraint;
                     }
                 }
                 catch (Exception e)

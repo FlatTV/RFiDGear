@@ -289,6 +289,9 @@ ein Kartenlesegerät auswählen</value>
   <data name="ENUM.TaskType_MifareDesfireTask.ChangeDefault" xml:space="preserve">
     <value>Voreinstellungen ändern</value>
   </data>
+  <data name="ENUM.TaskType_MifareDesfireTask.ChangeFileSettings" xml:space="preserve">
+    <value>Dateieinstellungen ändern</value>
+  </data>
   <data name="ENUM.TaskType_MifareDesfireTask.CreateFile" xml:space="preserve">
     <value>Datei erstellen</value>
   </data>
@@ -806,6 +809,9 @@ Wird benötigt von:
   <data name="labelContentMifareDesfireAppKey" xml:space="preserve">
     <value>App Schlüssel</value>
   </data>
+  <data name="labelContentMifareDesfireAppMasterKey" xml:space="preserve">
+    <value>App-Masterkey</value>
+  </data>
   <data name="toolTipMifareDesfireAppKeyPolicy" xml:space="preserve">
     <value>Policy=MK → Wert von Schlüssel 0 (Master Key) eingeben. Policy=KeyNo → Wert von Schlüssel N eingeben.</value>
   </data>
@@ -849,6 +855,9 @@ Wird benötigt von:
   </data>
   <data name="buttonContentMifareDesfireFileMasteringCreateFile" xml:space="preserve">
     <value>Datei erstellen</value>
+  </data>
+  <data name="buttonContentMifareDesfireFileMasteringChangeFileSettings" xml:space="preserve">
+    <value>Dateieinstellungen ändern</value>
   </data>
   <data name="buttonContentMifareDesfireFileMasteringDeleteFile" xml:space="preserve">
     <value>Datei löschen</value>
@@ -1703,6 +1712,12 @@ https://github.com/c3rebro/rfidgear</value>
   <data name="statusHeaderReaderIsUnknown" xml:space="preserve">
     <value>UNBEKANNT</value>
   </data>
+  <data name="messageBoxInvalidClassicKeysCaption" xml:space="preserve">
+    <value>Ungültiger Schlüssel</value>
+  </data>
+  <data name="messageBoxInvalidClassicKeysMessage" xml:space="preserve">
+    <value>Ein oder mehrere Classic-Schlüssel sind ungültig. Jeder Schlüssel muss genau 12 Hex-Zeichen haben (z. B. FFFFFFFFFFFF). Bitte den markierten Eintrag vor dem Speichern korrigieren.</value>
+  </data>
   <data name="messageBoxNoReaderFoundCaption" xml:space="preserve">
     <value>Fehler</value>
   </data>
@@ -1798,5 +1813,8 @@ https://github.com/c3rebro/rfidgear</value>
   </data>
   <data name="tabPageDefaultKeysCaption" xml:space="preserve">
     <value>Standardschlüssel</value>
+  </data>
+  <data name="menuItemReadAppWithKey" xml:space="preserve">
+    <value>App mit Schlüssel lesen…</value>
   </data>
 </root>

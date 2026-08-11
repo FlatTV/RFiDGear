@@ -137,6 +137,11 @@ namespace RFiDGear.Infrastructure.ReaderProviders
         {
             try
             {
+                // Disconnect from any cached chip so tryInitReader takes the full
+                // waitInsertion→connect path and getSingleChip returns the card
+                // currently on the reader, not a cached reference from a prior read.
+                try { readerUnit?.disconnect(); } catch { /* ignore if not connected */ }
+
                 if (await tryInitReader())
                 {
                     card = readerUnit.getSingleChip();
@@ -147,7 +152,6 @@ namespace RFiDGear.Infrastructure.ReaderProviders
                         try
                         {
                             var uidAsString = ByteArrayConverter.GetStringFrom(card.getChipIdentifier().ToArray());
-                            var t = card.getCardType();
                             var chipType = (CARD_TYPE)Enum.Parse(typeof(CARD_TYPE), card.getCardType());
 
                             if ((chipType & CARD_TYPE.DESFire) == CARD_TYPE.DESFire)
@@ -745,7 +749,7 @@ namespace RFiDGear.Infrastructure.ReaderProviders
         {
             var key = new DESFireKey();
             key.setKeyType(keyType);
-            CustomConverter.FormatMifareDesfireKeyStringWithSpacesEachByte(keyHex);
+            CustomConverter.FormatMifareDesfireKeyStringWithSpacesEachByte(keyHex, (DESFireKeyType)(int)keyType);
             key.fromString(CustomConverter.DesfireKeyToCheck);
             return key;
         }
@@ -1203,12 +1207,6 @@ namespace RFiDGear.Infrastructure.ReaderProviders
         {
             try
             {
-                // The excepted memory tree
-                DESFireLocation location = new DESFireLocation
-                {
-                    // The Application ID to use
-                    aid = (uint)_appID
-                };
                 // File communication requires encryption
 
                 var masterKey = MakeDesfireKey((LibLogicalAccess.Card.DESFireKeyType)_keyType, _applicationMasterKey);
@@ -1479,16 +1477,6 @@ namespace RFiDGear.Infrastructure.ReaderProviders
         {
             try
             {
-                // The excepted memory tree
-                DESFireLocation location = new DESFireLocation
-                {
-                    // The Application ID to use
-                    aid = (uint)_appID,
-
-                    // File communication requires encryption
-                    securityLevel = LibLogicalAccess.Card.EncryptionMode.CM_ENCRYPT
-                };
-
                 var masterKey = MakeDesfireKey((LibLogicalAccess.Card.DESFireKeyType)_keyTypePiccMasterKey, _piccMasterKey);
 
                 if (!await tryInitReader())
@@ -1736,9 +1724,8 @@ namespace RFiDGear.Infrastructure.ReaderProviders
                     {
                         var oldKey = new LibLogicalAccess.Card.DESFireKey();
                         oldKey.setKeyType((LibLogicalAccess.Card.DESFireKeyType)resolved.TargetKeyType);
-                        CustomConverter.FormatMifareDesfireKeyStringWithSpacesEachByte(resolved.OldTargetKeyHex);
-                        oldKey.fromString(CustomConverter.DesfireKeyToCheck);
-                        (card as LibLogicalAccess.Card.DESFireChip)?.getCrypto()?.setKey(resolved.AppId, resolved.TargetKeyNo, 0, oldKey);
+                        oldKey.fromString(resolved.OldTargetKeyHex);
+                        (card as LibLogicalAccess.Card.DESFireChip)?.getCrypto()?.setKey(resolved.AppId, 0, resolved.TargetKeyNo, oldKey);
                     }
 
                     // Change the requested key number to the new value.
@@ -1774,7 +1761,7 @@ namespace RFiDGear.Infrastructure.ReaderProviders
             {
                 DESFireKey masterApplicationKey = new DESFireKey();
                 masterApplicationKey.setKeyType((LibLogicalAccess.Card.DESFireKeyType)_keyTypeCurrent);
-                CustomConverter.FormatMifareDesfireKeyStringWithSpacesEachByte(_applicationMasterKeyCurrent);
+                CustomConverter.FormatMifareDesfireKeyStringWithSpacesEachByte(_applicationMasterKeyCurrent, _keyTypeCurrent);
                 masterApplicationKey.fromString(CustomConverter.DesfireKeyToCheck);
 
                 readerUnit.disconnectFromReader();
@@ -1816,6 +1803,58 @@ namespace RFiDGear.Infrastructure.ReaderProviders
                             {
                                 return ERROR.TransportError;
                             }
+                        }
+                    }
+                    else
+                        return ERROR.TransportError;
+                }
+                return ERROR.TransportError;
+            }
+            catch
+            {
+                return ERROR.TransportError;
+            }
+        }
+
+        /// <inheritdoc />
+        public override async Task<ERROR> ChangeMifareDesfireFileSettings(string changeKeyHex, DESFireKeyType changeKeyType, int changeKeyNo, DESFireAccessRights newAccessRights, EncryptionMode newEncMode, int appId = 0, int fileNo = 0)
+        {
+            try
+            {
+                var changeFileSettingsKey = MakeDesfireKey((LibLogicalAccess.Card.DESFireKeyType)changeKeyType, changeKeyHex);
+
+                var arToUse = new LibLogicalAccess.Card.DESFireAccessRights()
+                {
+                    changeAccess = (LibLogicalAccess.Card.TaskAccessRights)newAccessRights.changeAccess,
+                    readAccess = (LibLogicalAccess.Card.TaskAccessRights)newAccessRights.readAccess,
+                    writeAccess = (LibLogicalAccess.Card.TaskAccessRights)newAccessRights.writeAccess,
+                    readAndWriteAccess = (LibLogicalAccess.Card.TaskAccessRights)newAccessRights.readAndWriteAccess
+                };
+
+                if (await tryInitReader())
+                {
+                    card = readerUnit.getSingleChip();
+
+                    if (card.getCardType() == "DESFire" ||
+                        card.getCardType() == "DESFireEV1" ||
+                        card.getCardType() == "DESFireEV2" ||
+                        card.getCardType() == "DESFireEV3")
+                    {
+                        var cmd = card.getCommands() as DESFireCommands;
+                        try
+                        {
+                            cmd.selectApplication((uint)appId);
+                            cmd.authenticate((byte)changeKeyNo, changeFileSettingsKey);
+                            cmd.changeFileSettings((byte)fileNo, (LibLogicalAccess.Card.EncryptionMode)newEncMode, arToUse, false);
+
+                            return ERROR.NoError;
+                        }
+                        catch (Exception e)
+                        {
+                            if (e.Message != null && e.Message.Contains("authentication"))
+                                return ERROR.AuthFailure;
+                            else
+                                return ERROR.TransportError;
                         }
                     }
                     else

@@ -167,12 +167,10 @@ namespace RFiDGear.UI.MVVMDialogs.ViewModels
         {
             switch (keyType)
             {
-                case DESFireKeyType.DF_KEY_DES:
-                    return 16;
-
                 case DESFireKeyType.DF_KEY_3K3DES:
                     return 48;
 
+                case DESFireKeyType.DF_KEY_DES:
                 case DESFireKeyType.DF_KEY_AES:
                 default:
                     return 32;
