@@ -1,6 +1,7 @@
 using System.IO;
 using System.Threading.Tasks;
 using RFiDGear.Infrastructure.FileAccess;
+using RFiDGear.Infrastructure;
 using RFiDGear.Models;
 using RFiDGear.Services;
 using RFiDGear.Services.Interfaces;
@@ -15,6 +16,8 @@ namespace RFiDGear.Tests
         public async Task CustomProjectFileArgument_TriggersOpenProjectEvenWhenAutoLoadDisabled()
         {
             var tempProjectFile = Path.GetTempFileName();
+            var tempSettingsDirectory = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
+            Directory.CreateDirectory(tempSettingsDirectory);
             try
             {
                 var result = new StartupArgumentProcessor().Process(new[]
@@ -23,10 +26,9 @@ namespace RFiDGear.Tests
                     $"CUSTOMPROJECTFILE={tempProjectFile}"
                 });
 
-                var projectManager = new ProjectManager();
-                var settingsPath = projectManager.SettingsPath;
+                var settingsPath = Path.Combine(tempSettingsDirectory, "settings.xml");
 
-                using (var settingsWriter = new SettingsReaderWriter(projectManager.AppDataPath, loadSettings: false))
+                using (var settingsWriter = new SettingsReaderWriter(tempSettingsDirectory, loadSettings: false))
                 {
                     var specification = new DefaultSpecification(true)
                     {
@@ -48,7 +50,8 @@ namespace RFiDGear.Tests
                     }
                 };
 
-                await new ProjectBootstrapper().BootstrapAsync(request);
+                await new ProjectBootstrapper(
+                    () => new SettingsReaderWriter(tempSettingsDirectory)).BootstrapAsync(request);
 
                 Assert.Equal(new FileInfo(tempProjectFile).FullName, result.ProjectFilePath);
                 Assert.Equal(result.ProjectFilePath, openedPath);
@@ -56,6 +59,52 @@ namespace RFiDGear.Tests
             finally
             {
                 File.Delete(tempProjectFile);
+                Directory.Delete(tempSettingsDirectory, recursive: true);
+            }
+        }
+
+        [Fact]
+        public async Task AutorunBootstrap_AppliesPersistedReaderProviderBeforeExecution()
+        {
+            var tempSettingsDirectory = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
+            Directory.CreateDirectory(tempSettingsDirectory);
+            var settingsPath = Path.Combine(tempSettingsDirectory, "settings.xml");
+
+            try
+            {
+                using (var writer = new SettingsReaderWriter(tempSettingsDirectory, loadSettings: false))
+                {
+                    var specification = new DefaultSpecification(true)
+                    {
+                        DefaultReaderProvider = ReaderTypes.Elatec,
+                        AutoLoadProjectOnStart = false
+                    };
+                    writer.SaveSettings(specification, settingsPath);
+                }
+
+                var appliedProvider = ReaderTypes.None;
+                var providerAtRead = ReaderTypes.None;
+                var request = new ProjectBootstrapRequest
+                {
+                    Autorun = true,
+                    SetReaderProvider = value => appliedProvider = value,
+                    ResetTaskStatusAsync = () => Task.CompletedTask,
+                    ReadChipAsync = () =>
+                    {
+                        providerAtRead = appliedProvider;
+                        return Task.CompletedTask;
+                    },
+                    WriteOnceAsync = () => Task.CompletedTask
+                };
+
+                await new ProjectBootstrapper(() => new SettingsReaderWriter(tempSettingsDirectory)).BootstrapAsync(request);
+
+                Assert.Equal(ReaderTypes.Elatec, appliedProvider);
+                Assert.Equal(ReaderTypes.Elatec, providerAtRead);
+            }
+            finally
+            {
+                Directory.Delete(tempSettingsDirectory, true);
             }
         }
 
@@ -80,6 +129,29 @@ namespace RFiDGear.Tests
             {
                 File.Delete(tempProjectFile);
             }
+        }
+
+        [Fact]
+        public void AutoModeArgument_SetsAutoModeTrue()
+        {
+            var result = new StartupArgumentProcessor().Process(new[]
+            {
+                "RFiDGear.exe",
+                "AUTOMODE=1"
+            });
+
+            Assert.True(result.AutoMode);
+        }
+
+        [Fact]
+        public void AutoModeArgument_AbsentLeavesAutoModeFalse()
+        {
+            var result = new StartupArgumentProcessor().Process(new[]
+            {
+                "RFiDGear.exe"
+            });
+
+            Assert.False(result.AutoMode);
         }
 
         [Fact]

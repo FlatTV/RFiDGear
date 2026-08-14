@@ -231,6 +231,7 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
                 {
                     SelectedPlugin = Items.FirstOrDefault();
                 }
+                SelectFirstVisibleTab();
             }
             catch (Exception e)
             {
@@ -471,6 +472,17 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
         private bool isDesfireAppCreationTabEnabled;
 
         /// <summary>
+        /// Zero-based index of the currently selected tab, driven by <see cref="SelectedTaskType"/>.
+        /// </summary>
+        [XmlIgnore]
+        public int SelectedTabIndex
+        {
+            get => _selectedTabIndex;
+            set { _selectedTabIndex = value; OnPropertyChanged(nameof(SelectedTabIndex)); }
+        }
+        private int _selectedTabIndex;
+
+        /// <summary>
         /// Updates the enabled state of the DESFire authoring and authentication tabs in one place to reduce duplication.
         /// </summary>
         /// <param name="fileAuthoring">Flag indicating whether file authoring UI is enabled.</param>
@@ -496,6 +508,17 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
             IsDesfireAppAuthenticationTabEnabled = desfireAppAuthentication;
             IsDesfireAppAuthoringTabEnabled = desfireAppAuthoring;
             IsDesfireAppCreationTabEnabled = desfireAppCreation;
+            SelectFirstVisibleTab();
+        }
+
+        private void SelectFirstVisibleTab()
+        {
+            if (IsDesfirePICCAuthoringTabEnabled) SelectedTabIndex = 0;
+            else if (IsDesfireAppCreationTabEnabled) SelectedTabIndex = 1;
+            else if (IsDesfireAppAuthoringTabEnabled) SelectedTabIndex = 2;
+            else if (IsDesfireFileAuthoringTabEnabled) SelectedTabIndex = 3;
+            else if (IsDataExplorerEditTabEnabled) SelectedTabIndex = 4;
+            else SelectedTabIndex = HasPlugins ? 5 : 0;
         }
 
         /// <summary>
@@ -1373,14 +1396,7 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
             get => appNumberNew;
             set
             {
-                try
-                {
-                    appNumberNew = value.Length > 8 ? value.ToUpper().Remove(8) : value;
-                }
-                catch
-                {
-                    appNumberNew = value.ToUpper();
-                }
+                appNumberNew = value != null && value.Length > 8 ? value.ToUpper().Remove(8) : value;
                 IsValidAppNumberNew = TryParseDesfireAppId(value, out appNumberNewAsInt);
                 OnPropertyChanged(nameof(AppNumberNew));
             }
@@ -2534,6 +2550,8 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
                         {
                             StatusText += string.Format("{0}: Successfully Created AppID {1}\n", DateTime.Now, AppNumberNewAsInt);
                             CurrentTaskErrorLevel = createResult.Code;
+                            SelectedDesfireAppKeyEncryptionTypeCurrent = SelectedDesfireAppKeyEncryptionTypeCreateNewApp;
+                            AppNumberCurrent = AppNumberNew;
                             await UpdateReaderStatusCommand.ExecuteAsync(false);
                             return;
                         }
@@ -2575,6 +2593,8 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
                         {
                             StatusText += string.Format("{0}: Successfully Created AppID {1}\n", DateTime.Now, AppNumberNewAsInt);
                             CurrentTaskErrorLevel = createResult.Code;
+                            SelectedDesfireAppKeyEncryptionTypeCurrent = SelectedDesfireAppKeyEncryptionTypeCreateNewApp;
+                            AppNumberCurrent = AppNumberNew;
                             await UpdateReaderStatusCommand.ExecuteAsync(false);
                             return;
                         }
@@ -2627,70 +2647,30 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
 
                     if (IsValidDesfireKeyValue(DesfireAppKeyCurrent, SelectedDesfireAppKeyEncryptionTypeCurrent) && IsValidAppNumberNew != false)
                     {
-                        var result = await device.AuthToMifareDesfireApplication(
-                                DesfireAppKeyCurrent,
-                                SelectedDesfireAppKeyEncryptionTypeCurrent,
-                                selectedDesfireAppKeyNumberCurrentAsInt, AppNumberCurrentAsInt);
+                        // The provider owns the complete DESFire operation boundary:
+                        // SearchTag (TWN4 LEGIC) -> Select -> Authenticate -> CreateFile.
+                        var result = await device.CreateMifareDesfireFile(
+                            DesfireAppKeyCurrent,
+                            SelectedDesfireAppKeyEncryptionTypeCurrent,
+                            SelectedDesfireFileType,
+                            accessRights,
+                            SelectedDesfireFileCryptoMode,
+                            AppNumberCurrentAsInt,
+                            FileNumberCurrentAsInt,
+                            FileSizeCurrentAsInt);
 
                         if (result == ERROR.NoError)
                         {
-                            StatusText += string.Format("{0}: Successfully Authenticated to App {1}\n", DateTime.Now, AppNumberCurrentAsInt);
-
-                            result = await device.CreateMifareDesfireFile(
-                               DesfireAppKeyCurrent,
-                               SelectedDesfireAppKeyEncryptionTypeCurrent,
-                               SelectedDesfireFileType,
-                               accessRights,
-                               SelectedDesfireFileCryptoMode,
-                               AppNumberCurrentAsInt,
-                               FileNumberCurrentAsInt,
-                               FileSizeCurrentAsInt);
-
-                            if (result == ERROR.NoError)
-                            {
-                                StatusText += string.Format("{0}: Successfully Created FileNo: {1} with Size: {2} in AppID: {3}\n", DateTime.Now, FileNumberCurrentAsInt, FileSizeCurrentAsInt, AppNumberNewAsInt);
-                                CurrentTaskErrorLevel = result;
-                                await UpdateReaderStatusCommand.ExecuteAsync(false);
-                                return;
-                            }
-                            else
-                            {
-                                StatusText += string.Format("{0}: Unable to Create File: {1}\n", DateTime.Now, result.ToString());
-                                CurrentTaskErrorLevel = result;
-                                await UpdateReaderStatusCommand.ExecuteAsync(false);
-                                return;
-                            }
+                            StatusText += string.Format("{0}: Successfully Created FileNo: {1} with Size: {2} in AppID: {3}\n", DateTime.Now, FileNumberCurrentAsInt, FileSizeCurrentAsInt, AppNumberCurrentAsInt);
+                            CurrentTaskErrorLevel = result;
+                            await UpdateReaderStatusCommand.ExecuteAsync(false);
+                            return;
                         }
 
-                        else
-                        {
-                            StatusText += string.Format("{0}: Unable to Authenticate to App {1}; Try to Continue Anyway...\n", DateTime.Now, AppNumberCurrentAsInt);
-
-                            result = await device.CreateMifareDesfireFile(
-                                  DesfireAppKeyCurrent,
-                                  SelectedDesfireAppKeyEncryptionTypeCurrent,
-                                  SelectedDesfireFileType,
-                                  accessRights,
-                                  SelectedDesfireFileCryptoMode,
-                                  AppNumberCurrentAsInt,
-                                  FileNumberCurrentAsInt,
-                                  FileSizeCurrentAsInt);
-
-                            if (result == ERROR.NoError)
-                            {
-                                StatusText += string.Format("{0}: Successfully Created FileNo: {1} with Size: {2} in AppID: {3}\n", DateTime.Now, FileNumberCurrentAsInt, FileSizeCurrentAsInt, AppNumberNewAsInt);
-                                CurrentTaskErrorLevel = result;
-                                await UpdateReaderStatusCommand.ExecuteAsync(false);
-                                return;
-                            }
-                            else
-                            {
-                                StatusText += string.Format("{0}: Unable to Create File: {1}\n", DateTime.Now, result.ToString());
-                                CurrentTaskErrorLevel = result;
-                                await UpdateReaderStatusCommand.ExecuteAsync(false);
-                                return;
-                            }
-                        }
+                        StatusText += string.Format("{0}: Unable to Create File: {1}\n", DateTime.Now, result.ToString());
+                        CurrentTaskErrorLevel = result;
+                        await UpdateReaderStatusCommand.ExecuteAsync(false);
+                        return;
                     }
                 }
                 else
@@ -2721,52 +2701,38 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
 
                     StatusText = string.Format("{0}: {1}\n", DateTime.Now, ResourceLoader.GetResource("textBoxStatusTextBoxDllLoaded"));
 
-                    if (IsValidDesfireKeyValue(DesfireReadKeyCurrent, SelectedDesfireReadKeyEncryptionType))
+                    if (IsValidDesfireKeyValue(DesfireReadKeyCurrent, SelectedDesfireReadKeyEncryptionType) && IsValidAppNumberCurrent != false)
                     {
-                        var result = await device.AuthToMifareDesfireApplication(
-                                DesfireReadKeyCurrent,
-                                SelectedDesfireReadKeyEncryptionType,
-                                selectedDesfireReadKeyNumberAsInt, AppNumberCurrentAsInt);
+                        // The provider owns the complete DESFire operation boundary:
+                        // SelectApplication -> Authenticate -> ReadData.
+                        var result = await device.ReadMiFareDESFireChipFile(
+                            DesfireReadKeyCurrent,
+                            SelectedDesfireReadKeyEncryptionType,
+                            selectedDesfireReadKeyNumberAsInt,
+                            SelectedDesfireFileCryptoMode,
+                            FileNumberCurrentAsInt,
+                            AppNumberCurrentAsInt,
+                            FileSizeCurrentAsInt);
 
-
-                        if (IsValidAppNumberCurrent != false && result == ERROR.NoError)
+                        if (result == ERROR.NoError)
                         {
-                            StatusText += string.Format("{0}: Successfully Authenticated to App {1}\n", DateTime.Now, AppNumberCurrentAsInt);
+                            FileSizeCurrent = device.MifareDESFireData.Length.ToString();
+                            StatusText += string.Format("{0}: Successfully Read {2} Bytes Data from FileNo: {1} in AppID: {3}\n", DateTime.Now, FileNumberCurrentAsInt, FileSizeCurrentAsInt, AppNumberCurrentAsInt);
 
-                            result = await device.ReadMiFareDESFireChipFile(DesfireReadKeyCurrent, SelectedDesfireReadKeyEncryptionType, selectedDesfireReadKeyNumberAsInt,
-                                                                   SelectedDesfireFileCryptoMode, FileNumberCurrentAsInt, AppNumberCurrentAsInt, FileSizeCurrentAsInt);
-
-                            if (result == ERROR.NoError)
-                            {
-                                FileSizeCurrent = device.MifareDESFireData.Length.ToString();
-
-                                StatusText += string.Format("{0}: Successfully Read {2} Bytes Data from FileNo: {1} in AppID: {3}\n", DateTime.Now, FileNumberCurrentAsInt, FileSizeCurrentAsInt, AppNumberNewAsInt);
-
-                                var fromChipNode = EnsureDesfireDataNode(childNodeViewModelFromChip, FileNumberCurrentAsInt);
-                                var tempNode = EnsureDesfireDataNode(childNodeViewModelTemp, FileNumberCurrentAsInt);
-
-                                fromChipNode.DesfireFile = new MifareDesfireFileModel(device.MifareDESFireData, (byte)FileNumberCurrentAsInt);
-                                tempNode.DesfireFile = new MifareDesfireFileModel(device.MifareDESFireData, (byte)FileNumberCurrentAsInt);
-
-                                CurrentTaskErrorLevel = result;
-
-                                OnPropertyChanged(nameof(ChildNodeViewModelTemp));
-                                OnPropertyChanged(nameof(ChildNodeViewModelFromChip));
-                                SaveReadDataToFile(device.MifareDESFireData, device.GenericChip?.UID);
-                                await UpdateReaderStatusCommand.ExecuteAsync(false);
-                                return;
-                            }
-                            else
-                            {
-                                await SetErrorStatusAsync(result, "{0}: Unable to Read File with FileID: {1}: {2}", DateTime.Now, FileNumberCurrentAsInt, result.ToString());
-                                return;
-                            }
-                        }
-                        else
-                        {
-                            await SetErrorStatusAsync(result, "{0}: Unable to Read File: {1}", DateTime.Now, result.ToString());
+                            var fromChipNode = EnsureDesfireDataNode(childNodeViewModelFromChip, FileNumberCurrentAsInt);
+                            var tempNode = EnsureDesfireDataNode(childNodeViewModelTemp, FileNumberCurrentAsInt);
+                            fromChipNode.DesfireFile = new MifareDesfireFileModel(device.MifareDESFireData, (byte)FileNumberCurrentAsInt);
+                            tempNode.DesfireFile = new MifareDesfireFileModel(device.MifareDESFireData, (byte)FileNumberCurrentAsInt);
+                            CurrentTaskErrorLevel = result;
+                            OnPropertyChanged(nameof(ChildNodeViewModelTemp));
+                            OnPropertyChanged(nameof(ChildNodeViewModelFromChip));
+                            SaveReadDataToFile(device.MifareDESFireData, device.GenericChip?.UID);
+                            await UpdateReaderStatusCommand.ExecuteAsync(false);
                             return;
                         }
+
+                        await SetErrorStatusAsync(result, "{0}: Unable to Read File with FileID: {1}: {2}", DateTime.Now, FileNumberCurrentAsInt, result.ToString());
+                        return;
                     }
                 }
                 else
@@ -2925,71 +2891,60 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
                 if (device != null)
                 {
                     await UpdateReaderStatusCommand.ExecuteAsync(true);
-
                     StatusText = string.Format("{0}: {1}\n", DateTime.Now, ResourceLoader.GetResource("textBoxStatusTextBoxDllLoaded"));
 
-                    if (IsValidDesfireKeyValue(DesfireWriteKeyCurrent, SelectedDesfireWriteKeyEncryptionType))
+                    if (IsValidDesfireKeyValue(DesfireWriteKeyCurrent, SelectedDesfireWriteKeyEncryptionType) && IsValidAppNumberCurrent != false)
                     {
-
-                        var result = await device.AuthToMifareDesfireApplication(
-                                                                         DesfireWriteKeyCurrent,
-                                                                         SelectedDesfireWriteKeyEncryptionType,
-                                                                         selectedDesfireWriteKeyNumberAsInt, AppNumberCurrentAsInt);
-
-                        if (IsValidAppNumberCurrent != false && result == ERROR.NoError)
+                        if (!TryGetDesfireWritePayload(out var payload, out var errorMessage))
                         {
-                            StatusText += string.Format("{0}: Successfully Authenticated to App {1}\n", DateTime.Now, AppNumberCurrentAsInt);
-
-                            if (!TryGetDesfireWritePayload(out var payload, out var errorMessage))
-                            {
-                                await SetErrorStatusAsync(ERROR.Unknown, "{0}: Unable to prepare DESFire data payload: {1}\n", DateTime.Now, errorMessage);
-                                return;
-                            }
-
-                            result = await device.WriteMiFareDESFireChipFile(DesfireWriteKeyCurrent, SelectedDesfireWriteKeyEncryptionType, selectedDesfireWriteKeyNumberAsInt,
-                                                                   SelectedDesfireFileCryptoMode, FileNumberCurrentAsInt, AppNumberCurrentAsInt, payload);
-
-                            if (result == ERROR.NoError)
-                            {
-                                StatusText += string.Format("{0}: Successfully Wrote {2} Bytes to FileNo: {1} with Size: {2} in AppID: {3}\n", DateTime.Now, FileNumberCurrentAsInt, GrandChildNodeViewModel.SelectedDataLengthInBytes, AppNumberCurrentAsInt);
-                                await UpdateReaderStatusCommand.ExecuteAsync(false);
-
-                                if (consumedDataFileLine)
-                                {
-                                    // advance to the next line so that the following automatic run
-                                    // (e.g. "Markierte Aufgabe automatisch wiederholen") picks up new data
-                                    DesfireDataFileLineIndex++;
-                                    RefreshDesfireDataFilePreview();
-                                }
-                            }
-
-                            if (result == ERROR.NoError && SelectedDesfireFileType == FileType_MifareDesfireFileType.BackupFile && device.GetType() == typeof(ElatecNetProvider))
-                            {
-                                result = await device.CommitTransactionAsync();
-                            }
-
-                            if (result == ERROR.NoError)
-                            {
-                                if(SelectedDesfireFileType == FileType_MifareDesfireFileType.BackupFile)
-                                {
-                                    StatusText += string.Format("{0}: Commit Successfully FileNo: {1} in AppID: {3}\n", DateTime.Now, FileNumberCurrentAsInt, GrandChildNodeViewModel.SelectedDataLengthInBytes, AppNumberCurrentAsInt);
-                                }
-                                
-                                CurrentTaskErrorLevel = result;
-                                await UpdateReaderStatusCommand.ExecuteAsync(false);
-                                return;
-                            }
-                            else
-                            {
-                                await SetErrorStatusAsync(result, "{0}: Unable to Write Data: {1}\n", DateTime.Now, result.ToString());
-                                return;
-                            }
-                        }
-                        else
-                        {
-                            await SetErrorStatusAsync(result, "{0}: Unable to Write Data: {1}\n", DateTime.Now, result.ToString());
+                            await SetErrorStatusAsync(ERROR.Unknown, "{0}: Unable to prepare DESFire data payload: {1}\n", DateTime.Now, errorMessage);
                             return;
                         }
+
+                        // The provider owns the complete DESFire operation boundary:
+                        // SelectApplication -> Authenticate -> WriteData.
+                        var result = await device.WriteMiFareDESFireChipFile(
+                            DesfireWriteKeyCurrent,
+                            SelectedDesfireWriteKeyEncryptionType,
+                            selectedDesfireWriteKeyNumberAsInt,
+                            SelectedDesfireFileCryptoMode,
+                            FileNumberCurrentAsInt,
+                            AppNumberCurrentAsInt,
+                            payload);
+
+                        if (result == ERROR.NoError)
+                        {
+                            StatusText += string.Format("{0}: Successfully Wrote {2} Bytes to FileNo: {1} with Size: {2} in AppID: {3}\n", DateTime.Now, FileNumberCurrentAsInt, GrandChildNodeViewModel.SelectedDataLengthInBytes, AppNumberCurrentAsInt);
+                            await UpdateReaderStatusCommand.ExecuteAsync(false);
+
+                            if (consumedDataFileLine)
+                            {
+                                // advance to the next line so that the following automatic run
+                                // (e.g. "Markierte Aufgabe automatisch wiederholen") picks up new data
+                                DesfireDataFileLineIndex++;
+                                RefreshDesfireDataFilePreview();
+                            }
+                        }
+
+                        if (result == ERROR.NoError && SelectedDesfireFileType == FileType_MifareDesfireFileType.BackupFile && device.GetType() == typeof(ElatecNetProvider))
+                        {
+                            result = await device.CommitTransactionAsync();
+                        }
+
+                        if (result == ERROR.NoError)
+                        {
+                            if (SelectedDesfireFileType == FileType_MifareDesfireFileType.BackupFile)
+                            {
+                                StatusText += string.Format("{0}: Commit Successfully FileNo: {1} in AppID: {3}\n", DateTime.Now, FileNumberCurrentAsInt, GrandChildNodeViewModel.SelectedDataLengthInBytes, AppNumberCurrentAsInt);
+                            }
+
+                            CurrentTaskErrorLevel = result;
+                            await UpdateReaderStatusCommand.ExecuteAsync(false);
+                            return;
+                        }
+
+                        await SetErrorStatusAsync(result, "{0}: Unable to Write Data: {1}\n", DateTime.Now, result.ToString());
+                        return;
                     }
                 }
                 else
@@ -4237,6 +4192,18 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
                             StatusText += string.Format("{0}: Failed. Directory Listing is not allowed and PICC MK is Incorrect.\n", DateTime.Now);
 
                             CurrentTaskErrorLevel = ERROR.AuthFailure;
+                        }
+
+                        else if (IsValidAppNumberCurrent != false && result == ERROR.PermissionDenied)
+                        {
+                            StatusText += string.Format("{0}: Failed. DESFire directory listing was denied or the reader context was invalid.\n", DateTime.Now);
+                            CurrentTaskErrorLevel = ERROR.PermissionDenied;
+                        }
+
+                        else if (IsValidAppNumberCurrent != false && result == ERROR.TransportError)
+                        {
+                            StatusText += string.Format("{0}: Failed. Reader transport was unavailable while listing DESFire applications.\n", DateTime.Now);
+                            CurrentTaskErrorLevel = ERROR.TransportError;
                         }
 
                         // There are no Apps
