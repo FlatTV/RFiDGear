@@ -1937,7 +1937,17 @@ namespace RFiDGear.ViewModel
 
             mw = (MainWindow)Application.Current.MainWindow;
 
-            updateScheduler.Begin(() => AskForUpdateNow());
+            bool autoCheckForUpdates;
+            using (var settings = settingsReaderWriterFactory())
+            {
+                autoCheckForUpdates = settings.DefaultSpecification?.AutoCheckForUpdates ?? true;
+            }
+
+            if (autoCheckForUpdates)
+            {
+                updateScheduler.Begin(() => AskForUpdateNow());
+            }
+
             readerMonitor.StartMonitoring(CheckReader);
 
             var startupArguments = startupArgumentProcessor.Process(args);
