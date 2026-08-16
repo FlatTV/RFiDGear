@@ -427,6 +427,12 @@ ein Kartenlesegerät auswählen</value>
   <data name="labelReaderStatus" xml:space="preserve">
     <value>Kartenleser Status:</value>
   </data>
+  <data name="labelRdpPcscWarning" xml:space="preserve">
+    <value>PC/SC Kartenleser nicht verfügbar: Remotedesktopsitzung erkannt. SCardSvr wird durch die RDP-Smartcard-Umleitung gestört. Bitte einen Elatec TWN4 Leser verwenden oder fEnableSmartCard=0 in der Terminal-Services-Richtlinie setzen, um den PC/SC-Zugriff wiederherzustellen.</value>
+  </data>
+  <data name="labelRdpStatusBar" xml:space="preserve">
+    <value>RDP: PC/SC nicht verfügbar</value>
+  </data>
   <data name="labelSelectedReader" xml:space="preserve">
     <value>Ausgewählter Kartenleser:</value>
   </data>
@@ -1203,6 +1209,9 @@ Wird benötigt von:
   </data>
   <data name="ENUM.TaskType_MifareDesfireTask.ReadAppSettings" xml:space="preserve">
     <value>Prüfung: App Konfig</value>
+  </data>
+  <data name="ENUM.TaskType_MifareDesfireTask.CheckAppKeyCount" xml:space="preserve">
+    <value>Prüfung: App Schlüsselanzahl</value>
   </data>
   <data name="ENUM.ERROR.OutOfMemory" xml:space="preserve">
     <value>Nicht genügend Speicher</value>

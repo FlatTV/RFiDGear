@@ -1,9 +1,10 @@
 <?xml version="1.0" encoding="utf-8" ?>
-<Manifest version="2.0.7.0">
+<Manifest version="2.0.9.0">
   <CheckInterval>900</CheckInterval>
   <RemoteConfigUri>https://github.com/c3rebro/RFiDGear/releases/latest/download/update.xml</RemoteConfigUri>
   <SecurityToken>D68EF3A7-E787-4CC4-B020-878BA649B4DC</SecurityToken>
   <BaseUri>https://github.com/c3rebro/RFiDGear/releases/latest/download/</BaseUri>
+  <Payload>update.zip</Payload>
   <VersionInfoText>################## GENERAL USAGE INFORMATION ####################
 
 Available Arguments:
@@ -44,6 +45,50 @@ Available internal Variables
   + %EXIT will immediatly exit rfidgear application
 
 ################# END OF GENERAL INFORMATION ####################
+
+Version 2.0.9.0
+-----------------------------------------------------------------
+New:
+- Download progress dialog: a small window with a progress bar and Cancel button is
+  now shown while the update payload is being fetched; byte-level progress is reported
+  when the server supplies Content-Length, otherwise the bar shows a marquee
+- Cancelling a download mid-transfer cleanly aborts the HTTP stream and resets the
+  update state without leaving partial files on disk
+
+Fixed:
+- RDP sessions: selecting the PC/SC (LibLogicalAccess) reader provider while running
+  under Remote Desktop now falls back to None automatically; a warning is shown in the
+  reader settings panel and in the status bar explaining why PC/SC is not available
+  (see issue #203)
+- DESFire ReadAppSettings and CheckAppKeyCount: Authentication tab was incorrectly
+  enabled for these task types; tab availability corrected
+- DESFire ReadAppSettings: PICC master key settings inputs were incorrectly shown for
+  this task type; they are now hidden as expected
+
+Version 2.0.8.0
+-----------------------------------------------------------------
+New:
+- CheckAppKeyCount DESFire task: compare the application's actual max-key count
+  against an expected value; reports actual/expected counts with PASS/FAIL in the
+  status window
+- ReadAppSettings task: app-level inputs (App ID, key, key type, key number) are
+  now shown directly in the task dialog left panel so authentication to the
+  application's master key works without a prior manual step; "Perform Compare"
+  button allows a live smoke-test against the card before saving the task
+
+Fixed:
+- #201: ReadAppSettings task now supports two check modes: "at least" (all selected
+  key-settings bits must be set, additional bits permitted) and "exact match"
+  (byte must equal expected value exactly)
+- ReadAppSettings: status window was silent after the compare; it now shows the
+  actual and expected key-settings byte in hex with the PASS/FAIL verdict
+- ReadAppSettings: authentication used the wrong key (PICC master key instead of
+  the app master key); now correctly passes DesfireAppKeyCurrent to
+  GetMifareDesfireAppSettings
+- Elatec provider: removed IsTWN4LegicReader guards from all DESFire and MIFARE
+  Classic operations; SearchTagAsync is now called unconditionally before every
+  card operation, fixing connection failures on non-LEGIC Elatec readers that had
+  not performed a prior "Read Chip Public" in the main window
 
 Version 2.0.7.0
 -----------------------------------------------------------------
