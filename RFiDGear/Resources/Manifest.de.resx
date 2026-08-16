@@ -1541,6 +1541,12 @@ https://github.com/c3rebro/rfidgear</value>
   <data name="windowCaptionAskTaskDefault" xml:space="preserve">
     <value>Als Voreinstellung speichern?</value>
   </data>
+  <data name="windowCaptionUnsavedChanges" xml:space="preserve">
+    <value>Nicht gespeicherte Änderungen</value>
+  </data>
+  <data name="messageBoxMessageUnsavedChanges" xml:space="preserve">
+    <value>Das Projekt "{0}" enthält nicht gespeicherte Änderungen. Möchten Sie diese jetzt speichern?</value>
+  </data>
   <data name="ENUM.CARD_TYPE.SmartMX_DESFire_16K" xml:space="preserve">
     <value>Desfire 16K (Emuliert - z.B. SmartMX)</value>
   </data>

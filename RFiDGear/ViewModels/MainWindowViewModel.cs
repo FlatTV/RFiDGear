@@ -7,6 +7,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Globalization;
@@ -177,6 +178,7 @@ namespace RFiDGear.ViewModel
             TreeViewParentNodes = new ObservableCollection<RFiDChipParentLayerViewModel>();
 
             ChipTasks = new ChipTaskHandlerModel();
+            AttachProjectDirtyTracking();
 
             ReaderStatus = "";
             DateTimeStatusBar = "";
@@ -225,7 +227,6 @@ namespace RFiDGear.ViewModel
                 : null;
             if (mainWindow != null)
             {
-                mainWindow.Closing += new CancelEventHandler(CloseThreads);
                 mainWindow.Activated += new EventHandler(LoadCompleted);
 
                 if (mainWindow.IsActive)
@@ -293,6 +294,171 @@ namespace RFiDGear.ViewModel
             return Task.CompletedTask;
         }
 
+        #region Project Tracking (loaded project name / unsaved-changes indicator)
+
+        private string currentProjectPath;
+        /// <summary>
+        /// Full path of the project that has been explicitly loaded, opened, or saved in
+        /// this session. Null/empty while no project has been loaded (default state) -
+        /// in that state the window title and close behavior are unchanged from before.
+        /// </summary>
+        public string CurrentProjectPath
+        {
+            get => currentProjectPath;
+            private set
+            {
+                if (currentProjectPath == value) return;
+                currentProjectPath = value;
+                OnPropertyChanged(nameof(CurrentProjectPath));
+                OnPropertyChanged(nameof(IsProjectLoaded));
+                OnPropertyChanged(nameof(WindowTitle));
+            }
+        }
+
+        /// <summary>
+        /// True once a project has been explicitly loaded (via Open, auto-load-on-start,
+        /// a startup file argument, or Save/Save As) in this session.
+        /// </summary>
+        public bool IsProjectLoaded => !string.IsNullOrEmpty(CurrentProjectPath);
+
+        private bool isProjectDirty;
+        /// <summary>
+        /// True once the loaded project has unsaved changes (a task was added, removed,
+        /// reordered, or had one of its own properties edited since the last load/save).
+        /// Always false while <see cref="IsProjectLoaded"/> is false.
+        /// </summary>
+        public bool IsProjectDirty
+        {
+            get => isProjectDirty;
+            private set
+            {
+                if (isProjectDirty == value) return;
+                isProjectDirty = value;
+                OnPropertyChanged(nameof(IsProjectDirty));
+                OnPropertyChanged(nameof(WindowTitle));
+            }
+        }
+
+        /// <summary>
+        /// Text bound to the main window's title bar: "RFiDGear v{version} bam5br-Edition"
+        /// while no project has been explicitly loaded (unchanged legacy behavior), otherwise
+        /// with " - {project name}" appended, plus a trailing "*" while there are unsaved
+        /// changes.
+        /// </summary>
+        public string WindowTitle
+        {
+            get
+            {
+                var baseTitle = string.Format(CultureInfo.InvariantCulture, "RFiDGear v{0}.{1}.{2} bam5br-Edition", Version.Major, Version.Minor, Version.Build);
+                return IsProjectLoaded
+                    ? string.Format(CultureInfo.InvariantCulture, "{0} - {1}{2}", baseTitle, Path.GetFileNameWithoutExtension(CurrentProjectPath), IsProjectDirty ? "*" : string.Empty)
+                    : baseTitle;
+            }
+        }
+
+        /// <summary>
+        /// Marks <paramref name="path"/> as the active project and clears the unsaved-changes
+        /// flag. Called once a load or save has fully completed, so it overrides whatever
+        /// transient dirty state the load's own TaskCollection.Clear()/Add() calls set.
+        /// </summary>
+        private void SetCurrentProject(string path)
+        {
+            CurrentProjectPath = path;
+            IsProjectDirty = false;
+        }
+
+        /// <summary>
+        /// Marks the active project as having unsaved changes. No-op while no project is
+        /// loaded, so the legacy (no title/no close-prompt) behavior is preserved exactly
+        /// when the user never explicitly loaded a project.
+        /// </summary>
+        private void MarkProjectDirty()
+        {
+            if (IsProjectLoaded)
+            {
+                IsProjectDirty = true;
+            }
+        }
+
+        /// <summary>
+        /// Subscribes to <see cref="ChipTaskHandlerModel.TaskCollection"/> so that adding,
+        /// removing, or reordering tasks - or editing a property on any task already in the
+        /// collection - marks the project dirty. Called once, right after ChipTasks is
+        /// constructed; project loads reuse the same collection instance (Clear()+Add()),
+        /// they don't replace it, so a single subscription covers the whole session.
+        /// </summary>
+        private void AttachProjectDirtyTracking()
+        {
+            ChipTasks.TaskCollection.CollectionChanged += OnTaskCollectionChangedForDirtyTracking;
+        }
+
+        private void OnTaskCollectionChangedForDirtyTracking(object sender, NotifyCollectionChangedEventArgs e)
+        {
+            MarkProjectDirty();
+
+            if (e.OldItems != null)
+            {
+                foreach (var item in e.OldItems.OfType<INotifyPropertyChanged>())
+                {
+                    item.PropertyChanged -= OnTaskItemPropertyChangedForDirtyTracking;
+                }
+            }
+
+            if (e.NewItems != null)
+            {
+                foreach (var item in e.NewItems.OfType<INotifyPropertyChanged>())
+                {
+                    item.PropertyChanged += OnTaskItemPropertyChangedForDirtyTracking;
+                }
+            }
+        }
+
+        private void OnTaskItemPropertyChangedForDirtyTracking(object sender, PropertyChangedEventArgs e)
+        {
+            MarkProjectDirty();
+        }
+
+        /// <summary>
+        /// If a project is loaded and has unsaved changes, prompts the user to save, discard,
+        /// or cancel. Returns true if it's fine to proceed with closing (saved, discarded, or
+        /// nothing to save), false if the user cancelled (the close should be vetoed). Called
+        /// both by <see cref="CloseApplication"/> and by the view's Window.Closing handler, so
+        /// unsaved changes are caught whether the app is closed via Escape/menu or the native
+        /// window X button / Alt+F4.
+        /// </summary>
+        public async Task<bool> ConfirmCloseWithUnsavedChangesAsync()
+        {
+            if (!IsProjectLoaded || !IsProjectDirty)
+            {
+                return true;
+            }
+
+            var mbox = new MessageBoxViewModel
+            {
+                ParentWindow = mw,
+                Caption = ResourceLoader.GetResource("windowCaptionUnsavedChanges"),
+                Message = string.Format(CultureInfo.InvariantCulture, ResourceLoader.GetResource("messageBoxMessageUnsavedChanges"), Path.GetFileNameWithoutExtension(CurrentProjectPath)),
+                Buttons = MessageBoxButton.YesNoCancel
+            };
+
+            switch (mbox.Show(Dialogs))
+            {
+                case MessageBoxResult.Yes:
+                    await OnNewSaveTaskDialogCommand();
+                    // If the user picked "Yes" but a required Save-As was itself cancelled,
+                    // IsProjectDirty is still true here - veto the close in that case too.
+                    return !IsProjectDirty;
+
+                case MessageBoxResult.No:
+                    return true;
+
+                default:
+                    return false;
+            }
+        }
+
+        #endregion Project Tracking
+
         /// <summary>
         /// Opens the last-used project file from settings when no explicit path is provided.
         /// </summary>
@@ -350,6 +516,7 @@ namespace RFiDGear.ViewModel
                     Dialogs.RemoveAt(0);
                 }
 
+                SetCurrentProject(lastUsedDBPath);
                 OnPropertyChanged(nameof(ChipTasks));
             }
         }
@@ -1270,6 +1437,8 @@ namespace RFiDGear.ViewModel
                     {
                         await Application.Current.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new Action(() => ChipTasks.TaskCollection.Add(setup)));
                     }
+
+                    SetCurrentProject(dlg.FileName);
                 }
             }
 
@@ -1298,6 +1467,7 @@ namespace RFiDGear.ViewModel
                 }
 
                 databaseReaderWriter.WriteDatabase(ChipTasks, targetPath);
+                SetCurrentProject(targetPath);
             }
         }
 
@@ -1344,6 +1514,7 @@ namespace RFiDGear.ViewModel
             if (!string.IsNullOrEmpty(fileName))
             {
                 databaseReaderWriter.WriteDatabase(ChipTasks, fileName);
+                SetCurrentProject(fileName);
             }
         }
 
@@ -1437,12 +1608,16 @@ namespace RFiDGear.ViewModel
         }
 
         /// <summary>
-        /// 
+        /// Bound to Escape and the "Exit" menu item. Prompts to save unsaved changes
+        /// (if a project is loaded and dirty) before terminating the process.
         /// </summary>
-        public ICommand CloseApplication => new RelayCommand(OnCloseRequest);
-        private void OnCloseRequest()
+        public IAsyncRelayCommand CloseApplication => new AsyncRelayCommand(OnCloseRequestAsync);
+        private async Task OnCloseRequestAsync()
         {
-            Environment.Exit(0);
+            if (await ConfirmCloseWithUnsavedChangesAsync())
+            {
+                Environment.Exit(0);
+            }
         }
 
         #endregion Menu Commands
@@ -1756,17 +1931,11 @@ namespace RFiDGear.ViewModel
             userIsNotifiedForAvailableUpdate = true;
         }
 
-        private void CloseThreads(object sender, CancelEventArgs e)
-        {
-            Environment.Exit(0);
-        }
-
         private async void LoadCompleted(object sender, EventArgs e)
         {
             Application.Current.MainWindow.Activated -= new EventHandler(LoadCompleted);
 
             mw = (MainWindow)Application.Current.MainWindow;
-            mw.Title = string.Format("RFiDGear v{0}.{1}.{2} bam5br-Edition", Version.Major, Version.Minor, Version.Build);
 
             updateScheduler.Begin(() => AskForUpdateNow());
             readerMonitor.StartMonitoring(CheckReader);

@@ -1519,6 +1519,12 @@ https://github.com/c3rebro/rfidgear</value>
   <data name="windowCaptionAskTaskDefault" xml:space="preserve">
     <value>Set as Default?</value>
   </data>
+  <data name="windowCaptionUnsavedChanges" xml:space="preserve">
+    <value>Unsaved Changes</value>
+  </data>
+  <data name="messageBoxMessageUnsavedChanges" xml:space="preserve">
+    <value>The project "{0}" has unsaved changes. Do you want to save them now?</value>
+  </data>
   <data name="ENUM.CARD_TYPE.SmartMX_DESFire_16K" xml:space="preserve">
     <value>Desfire 16K (Emulated - SmartMX)</value>
   </data>
