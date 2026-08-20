@@ -108,7 +108,8 @@
                 ScrollViewer.VerticalScrollBarVisibility="Auto"
                 ScrollViewer.CanContentScroll="True"
                 ItemsSource="{Binding TreeViewParentNodes}"
-                uiBehaviors:TreeViewSelectionBehavior.ClearSelectionOnEmptySpace="True">
+                uiBehaviors:TreeViewSelectionBehavior.ClearSelectionOnEmptySpace="True"
+                uiBehaviors:TreeViewAutoScrollBehavior.AutoScrollToLastItem="True">
                 <TreeView.ItemContainerStyle>
                     <!--  This Style binds a TreeViewItem to a TreeViewModelBase.  -->
                     <Style TargetType="{x:Type TreeViewItem}">
