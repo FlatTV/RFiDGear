@@ -1466,8 +1466,8 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
             get => appNumberNew;
             set
             {
-                appNumberNew = value != null && value.Length > 8 ? value.ToUpper().Remove(8) : value;
-                IsValidAppNumberNew = TryParseDesfireAppId(value, out appNumberNewAsInt);
+                appNumberNew = value?.Trim().ToUpperInvariant();
+                IsValidAppNumberNew = TryParseDesfireAppId(appNumberNew, out appNumberNewAsInt);
                 OnPropertyChanged(nameof(AppNumberNew));
             }
         }
@@ -1795,15 +1795,8 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
             get => appNumberCurrent;
             set
             {
-                try
-                {
-                    appNumberCurrent = value.Length > 8 ? value.ToUpper().Remove(8) : value;
-                }
-                catch
-                {
-                    appNumberCurrent = value.ToUpper();
-                }
-                IsValidAppNumberCurrent = TryParseDesfireAppId(value, out appNumberCurrentAsInt);
+                appNumberCurrent = value?.Trim().ToUpperInvariant();
+                IsValidAppNumberCurrent = TryParseDesfireAppId(appNumberCurrent, out appNumberCurrentAsInt);
                 OnPropertyChanged(nameof(AppNumberCurrent));
                 OnPropertyChanged(nameof(IsAppKeyChangeEnabled));
                 OnPropertyChanged(nameof(ShowAppKeyOldInputs));
@@ -1944,15 +1937,8 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
             get => appNumberTarget;
             set
             {
-                try
-                {
-                    appNumberTarget = value.Length > 8 ? value.ToUpper().Remove(8) : value;
-                }
-                catch
-                {
-                    appNumberTarget = value.ToUpper();
-                }
-                IsValidAppNumberTarget = TryParseDesfireAppId(value, out appNumberTargetAsInt);
+                appNumberTarget = value?.Trim().ToUpperInvariant();
+                IsValidAppNumberTarget = TryParseDesfireAppId(appNumberTarget, out appNumberTargetAsInt);
                 OnPropertyChanged(nameof(AppNumberTarget));
             }
         }
