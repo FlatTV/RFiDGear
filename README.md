@@ -22,6 +22,7 @@ In case of PCSC Provider: a PCSC compatibile Reader:
 * Omnikey 5422
 * Sciel SCL3711
 * ACR 122U
+* Elatec Reader TWN4 MultiTech using CCID Firmware
 
 ## System requirements
 
@@ -53,6 +54,12 @@ Task types include:
   * PICC-level operations: change the master key or format the card
   * Application-level operations: create apps, change keys, delete apps, authenticate
   * File-level operations: create, write, read, and delete files
+  * Features of the **bam5br-Edition** by FlatTV:
+   * Batch processing can be performed using an input file.
+    Before data is written to card, you must manually confirm this (including scrolling forward and backward to select other data from the input file). The data can be separated by ";" for better readability.
+   * During batch processing, an output file containing timestamps, UIDs, and raw data can be created
+   * New "Read Files (with Key)" dialog for retrieving file sizes and configurations of individual files
+   * Open project files are displayed in the main menu, changes are marked with "*" (global, not only for MIFARE DESFire)
 
 ## Main window quick start
 
