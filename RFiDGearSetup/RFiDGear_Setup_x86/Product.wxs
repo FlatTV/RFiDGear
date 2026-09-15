@@ -150,10 +150,8 @@
       <!-- For a list of folder variables, see: http://msdn.microsoft.com/en-us/library/aa372057%28VS.85%29.aspx -->
       <Directory Id="$(var.PlatformProgramFilesFolder)" Name="root">
         <!-- All folders from here on are relative to their parent. -->
-        <Directory Id="ProgramFilesHK" Name="!(loc.ManufacturerName)">
-          <!-- INSTALLDIR is a property name. We need it later for the UI (to be able to change the install dir. -->
-          <Directory Id="INSTALLDIR" Name="!(loc.ApplicationName)">
-          </Directory>
+        <!-- INSTALLDIR is a property name. We need it later for the UI (to be able to change the install dir. -->
+        <Directory Id="INSTALLDIR" Name="!(loc.ApplicationName)">
         </Directory>
       </Directory>
       <Directory Id="$(var.RFIDGear_ProgramDataDir)">

@@ -3,8 +3,8 @@
 	<String Id="Language">1031</String>         <!-- Supported language and codepage codes can be found here: http://www.tramontana.co.hu/wix/lesson2.php#2.4 -->
 	
 	<String Id="ApplicationName">RFiDGear</String>
-	<String Id="ManufacturerName">Messgeraetetechnik Hansen</String>
-	<String Id="ManufacturerFullName">Messgeraetetechnik Hansen</String>
+	<String Id="ManufacturerName">FlatTV</String>
+	<String Id="ManufacturerFullName">FlatTV</String>
 	<String Id="ProductDescription">Read Write Modify RFID Tags</String>
 	<String Id="Comments">Installiert die RFiDGear Applikation</String>
 	
