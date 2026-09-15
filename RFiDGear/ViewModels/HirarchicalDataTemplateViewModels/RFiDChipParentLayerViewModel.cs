@@ -607,7 +607,7 @@ namespace RFiDGear.ViewModel
             {
                 appNode.Children.Add(new RFiDChipGrandChildLayerViewModel(string.Format("Available Keys: {0}", device.MaxNumberOfAppKeys)));
                 appNode.Children.Add(new RFiDChipGrandChildLayerViewModel(string.Format("App Encryption Type: {0}", Enum.GetName(typeof(DESFireKeyType), device.EncryptionType))));
-                appNode.Children.Add(new RFiDChipGrandChildLayerViewModel(string.Format("Key Settings: {0}", Enum.GetName(typeof(DESFireKeySettings), device.DesfireAppKeySetting & (DESFireKeySettings)0xF0))));
+                appNode.Children.Add(new RFiDChipGrandChildLayerViewModel(string.Format("Key Settings: {0} (0x{1:X2})", Enum.GetName(typeof(DESFireKeySettings), device.DesfireAppKeySetting & (DESFireKeySettings)0xF0), (byte)device.DesfireAppKeySetting)));
                 appNode.Children.Add(new RFiDChipGrandChildLayerViewModel(string.Format("Allow Change AMK: {0}", (device.DesfireAppKeySetting & (DESFireKeySettings)0x01) == (DESFireKeySettings)0x01 ? "yes" : "no")));
                 appNode.Children.Add(new RFiDChipGrandChildLayerViewModel(string.Format("Allow Listing without AMK: {0}", (device.DesfireAppKeySetting & (DESFireKeySettings)0x02) == (DESFireKeySettings)0x02 ? "yes" : "no")));
                 appNode.Children.Add(new RFiDChipGrandChildLayerViewModel(string.Format("Allow Create/Delete without AMK: {0}", (device.DesfireAppKeySetting & (DESFireKeySettings)0x04) == (DESFireKeySettings)0x04 ? "yes" : "no")));
