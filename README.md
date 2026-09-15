@@ -54,12 +54,34 @@ Task types include:
   * PICC-level operations: change the master key or format the card
   * Application-level operations: create apps, change keys, delete apps, authenticate
   * File-level operations: create, write, read, and delete files
-  * Features of the **bam5br-Edition** by FlatTV:
-    * Batch processing can be performed using an input file.
-    Before data is written to card, you must manually confirm this (including scrolling forward and backward to select other data from the input file). The data can be separated by ";" for better readability.
-    * During batch processing, an output file containing timestamps, UIDs, and raw data can be created
-    * New "Read Files (with Key)" dialog for retrieving file sizes and configurations of individual files
-    * Open project files are displayed in the main menu, changes are marked with "*" (global, not only for MIFARE DESFire)
+
+## Summary of changes in this FlatTV fork (bam5br-Edition)
+
+This section summarizes the main differences introduced in the FlatTV "bam5br-Edition" fork compared to the upstream c3rebro/RFiDGear master branch. It focuses on notable new features, robustness and bug fixes, user-interface improvements, and packaging changes.
+
+1) New features and UX improvements
+- [MIFARE DESFire] Batch processing enhancements: line-by-line batch input support, an optional per-run confirmation dialog that lets you scroll forward/back through input records before writing, and the ability to consume the next input line automatically for repeated/automated runs.
+- [MIFARE DESFire] A new "Read Files (with Key)" dialog and view-model that lets a user authenticate to a DESFire application with a supplied key to read its file list and file settings when free listing is not permitted.
+- Project/unsaved-changes tracking: the main window title now shows the loaded project and a trailing "*" when there are unsaved changes; there is also a prompt on close to save/discard/cancel.
+- Small UX improvements: auto-scrolling TreeView behavior for the most recently added items; richer custom dialog navigation (Previous/Next) for multi-step confirmations.
+
+2) MIFARE DESFire and reader-provider robustness & bug fixes
+- Key handling fixes: key-length and formatting are now type-aware (DES / 3K3DES / AES) so AES and 3K3DES keys are no longer truncated or rejected by helpers that previously assumed a fixed hex length.
+- Improved authentication and session handling: reader disconnect/reconnect is used in places where DESFire EV2/EV3 cards require a fresh RF session (to avoid "status does not allow the requested command" during re-authentication). Several methods now attempt a conservative retry strategy and verify outcomes when exceptions are thrown.
+- Better error diagnostics: providers now capture native exception text (LastNativeErrorMessage) and surface more informative error classification (AuthFailure, TransportError, ProtocolConstraint) instead of generic failures.
+- More robust DeleteApplication / ChangeKey / GetFileList / GetFileSettings implementations with fallbacks and verification steps to reduce silent failures.
+
+3) Task execution, validation and automation
+- Many task view-models and execution paths now perform stricter validation (e.g., AppID parsing) and use type-aware key validation before attempting operations.
+- Task execution improvements for automation: confirmation dialogs used during unattended runs are wired to the task execution service so they can be shown properly (or deferred) during automated loops; the task watchdog can be suspended while waiting for the user's confirmation to avoid spurious timeouts.
+- Write/read flows extended with options to append vs overwrite read-output files and to consume input data lines incrementally during repeated executions.
+
+4) Installer, build and resource changes
+- Installer bundle updated to include the Windows Desktop Runtime (windowsdesktop-runtime) for .NET 8 WPF applications instead of the aspnetcore runtime.
+
+5) Misc / internal improvements
+- Many small fixes in Views and ViewModels (XAML tweaks, safer property handling, stricter parsing) and new utility classes added (e.g., TreeView auto-scroll behavior).
+- AccessRights parsing and file-size decoding fixes to correctly present DESFire file metadata.
 
 ## Main window quick start
 
