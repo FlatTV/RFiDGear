@@ -340,10 +340,10 @@ namespace RFiDGear.UI.MVVMDialogs.ViewModels
                             fileNode.Children.Add(new RFiDChipGrandGrandChildLayerViewModel(string.Format("FileType: {0}", Enum.GetName(typeof(FileType_MifareDesfireFileType), device.DesfireFileSettings.FileType)), fileNode));
                             fileNode.Children.Add(new RFiDChipGrandGrandChildLayerViewModel(string.Format("FileSize: {0}Bytes", device.DesfireFileSettings.dataFile.fileSize.ToString(CultureInfo.CurrentCulture)), fileNode));
                             fileNode.Children.Add(new RFiDChipGrandGrandChildLayerViewModel(string.Format("CommMode: {0}", Enum.GetName(typeof(EncryptionMode), device.DesfireFileSettings.comSett)), fileNode));
-                            fileNode.Children.Add(new RFiDChipGrandGrandChildLayerViewModel(string.Format("Read: {0}", Enum.GetName(typeof(TaskAccessRights), (device.DesfireFileSettings.accessRights[1] & 0xF0) >> 4)), fileNode));
-                            fileNode.Children.Add(new RFiDChipGrandGrandChildLayerViewModel(string.Format("Write: {0}", Enum.GetName(typeof(TaskAccessRights), device.DesfireFileSettings.accessRights[1] & 0x0F)), fileNode));
-                            fileNode.Children.Add(new RFiDChipGrandGrandChildLayerViewModel(string.Format("RW: {0}", Enum.GetName(typeof(TaskAccessRights), (device.DesfireFileSettings.accessRights[0] & 0xF0) >> 4)), fileNode));
-                            fileNode.Children.Add(new RFiDChipGrandGrandChildLayerViewModel(string.Format("Change: {0}", Enum.GetName(typeof(TaskAccessRights), device.DesfireFileSettings.accessRights[0] & 0x0F)), fileNode));
+                            fileNode.Children.Add(new RFiDChipGrandGrandChildLayerViewModel(string.Format("Read: {0}", Enum.GetName(typeof(TaskAccessRights), device.DesfireFileSettings.accessRights[0] & 0x0F)), fileNode));
+                            fileNode.Children.Add(new RFiDChipGrandGrandChildLayerViewModel(string.Format("Write: {0}", Enum.GetName(typeof(TaskAccessRights), (device.DesfireFileSettings.accessRights[0] & 0xF0) >> 4)), fileNode));
+                            fileNode.Children.Add(new RFiDChipGrandGrandChildLayerViewModel(string.Format("RW: {0}", Enum.GetName(typeof(TaskAccessRights), device.DesfireFileSettings.accessRights[1] & 0x0F)), fileNode));
+                            fileNode.Children.Add(new RFiDChipGrandGrandChildLayerViewModel(string.Format("Change: {0}", Enum.GetName(typeof(TaskAccessRights), (device.DesfireFileSettings.accessRights[1] & 0xF0) >> 4)), fileNode));
                         }
 
                         newChildren.Add(fileNode);
