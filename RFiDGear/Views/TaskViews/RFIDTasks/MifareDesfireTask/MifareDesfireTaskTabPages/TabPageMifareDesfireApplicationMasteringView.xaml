@@ -469,7 +469,7 @@
                         HorizontalAlignment="Stretch"
                         VerticalContentAlignment="Center"
                         HorizontalContentAlignment="Left"
-                        Visibility="{Binding ShowAppKeyCurrentInputs, Converter={StaticResource BoolToVisConv}}"
+                        Visibility="{Binding ShowAppKeyNumberInput, Converter={StaticResource BoolToVisConv}}"
                         Content="{Binding LocalizationResourceSet, Converter={StaticResource Localization}, ConverterParameter='labelContentMifareDesfireKeyNumber'}" />
                     <ComboBox
                         Grid.Row="4"
@@ -478,7 +478,7 @@
                         Height="26"
                         VerticalAlignment="Stretch"
                         HorizontalAlignment="Stretch"
-                        Visibility="{Binding ShowAppKeyCurrentInputs, Converter={StaticResource BoolToVisConv}}"
+                        Visibility="{Binding ShowAppKeyNumberInput, Converter={StaticResource BoolToVisConv}}"
                         ItemsSource="{Binding MifareDesfireKeys}"
                         SelectedItem="{Binding SelectedDesfireAppKeyNumberCurrent, UpdateSourceTrigger=PropertyChanged, Mode=TwoWay}" />
                     <Label
