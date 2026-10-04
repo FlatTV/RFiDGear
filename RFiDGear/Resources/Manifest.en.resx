@@ -1402,8 +1402,11 @@ Needed by:
     <value>About RFiDGear</value>
   </data>
   <data name="textBoxTextAboutRFiDGear" xml:space="preserve">
-    <value>Your Essential Gear for RFID Encoding
-https://github.com/FlatTV/RFiDGear</value>
+    <value>FlatTV fork of c3rebro/RFiDGear
+https://github.com/FlatTV/RFiDGear
+
+Original project:
+https://github.com/c3rebro/RFiDGear</value>
   </data>
   <data name="ENUM.TaskType_MifareClassicTask.EmptyCheck" xml:space="preserve">
     <value>Sector Unused Check</value>

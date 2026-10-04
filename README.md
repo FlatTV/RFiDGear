@@ -4,10 +4,9 @@
 
 Support for batch processing.
 
-[![Codacy Badge](https://api.codacy.com/project/badge/Grade/ac98d255ca38466bb5803f9e2e4a11ae)](https://www.codacy.com/app/c3rebro/rfidgear)
-![](https://messgeraetetechnik-hansen.de/rfidgear/mainWnd.jpg) 
+### [Download](https://github.com/FlatTV/RFiDGear/releases) | [Report Bugs](https://github.com/FlatTV/RFiDGear/issues)
 
-### [Info](https://c3rebro.github.io/RFiDGear/) | [Download](https://github.com/c3rebro/RFiDGear/releases) | [Report Bugs](https://github.com/c3rebro/RFiDGear/issues)
+> This is a fork of [c3rebro/RFiDGear](https://github.com/c3rebro/RFiDGear). See the section below for a summary of changes introduced in this fork.
 
 Requirements:
 
