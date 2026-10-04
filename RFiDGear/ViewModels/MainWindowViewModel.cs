@@ -56,6 +56,25 @@ namespace RFiDGear.ViewModel
     public class MainWindowViewModel : ObservableObject
     {
         private readonly Version Version = Assembly.GetExecutingAssembly().GetName().Version;
+
+        /// <summary>
+        /// Short git commit id this build was made from (the SDK appends "+&lt;hash&gt;" to the informational version),
+        /// or <c>null</c> if the build did not happen inside a git repository.
+        /// </summary>
+        private static string BuildCommitId
+        {
+            get
+            {
+                var info = Assembly.GetExecutingAssembly()
+                    .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
+                var plus = info?.IndexOf('+') ?? -1;
+                if (plus < 0 || info.Length <= plus + 1)
+                    return null;
+
+                var commit = info.Substring(plus + 1);
+                return commit.Length > 7 ? commit.Substring(0, 7) : commit;
+            }
+        }
 #nullable enable
 #nullable disable
         private readonly string[] args;
@@ -737,7 +756,8 @@ namespace RFiDGear.ViewModel
             Dialogs.Add(new AboutViewModel()
             {
                 Caption = ResourceLoader.GetResource("windowCaptionAboutRFiDGear"),
-                AboutText = string.Format("RFiDGear {0}.{1}.{2} {3}\n\n", Version.Major, Version.Minor, Version.Build, Constants.TITLE_SUFFIX)
+                AboutText = string.Format("RFiDGear {0}.{1}.{2} {3}", Version.Major, Version.Minor, Version.Build, Constants.TITLE_SUFFIX)
+                + (BuildCommitId != null ? string.Format(" (commit {0})", BuildCommitId) : string.Empty) + "\n\n"
                 + ResourceLoader.GetResource("textBoxTextAboutRFiDGear"),
 
                 OnOk = (sender) =>

@@ -38,6 +38,8 @@
     <GenerateClickOnceManifests>false</GenerateClickOnceManifests>    
     <ApplicationManifest>Properties\app.manifest</ApplicationManifest>
     <AssemblyVersion>2.0.10.0</AssemblyVersion>
+    <!-- The .NET SDK appends "+<commit hash>" to this value at build time (shown in the About dialog). -->
+    <InformationalVersion>$(AssemblyVersion)</InformationalVersion>
     <Platforms>AnyCPU;x64;x86</Platforms>
     <FileVersion>$(AssemblyVersion)</FileVersion>
     <NeutralLanguage>en-US</NeutralLanguage>
