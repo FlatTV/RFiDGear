@@ -19,7 +19,7 @@
 	<?define UpgradeCode="a34bc413-e349-4fd1-8b90-2eb95a333489" ?>
 	
 	<!-- The URL for add/remove programs -->
-	<?define InfoURL="https://c3rebro.github.io/RFiDGear/" ?>
+	<?define InfoURL="https://github.com/FlatTV/RFiDGear" ?>
 	<?define RFIDGear_ProgramDataDir = "CommonAppDataFolder" ?>
 	
         <!-- x86 variables -->

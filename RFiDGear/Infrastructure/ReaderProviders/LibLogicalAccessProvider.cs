@@ -1936,33 +1936,11 @@ namespace RFiDGear.Infrastructure.ReaderProviders
         }
 
         /// <inheritdoc />
-        public override async Task<ERROR> DeleteMifareDesfireApplication(string _applicationMasterKey, DESFireKeyType _keyType, uint _appID = 0, bool authenticateToPICCFirst = true,
-            string _applicationOwnMasterKey = null, DESFireKeyType? _applicationOwnMasterKeyType = null)
+        public override async Task<ERROR> DeleteMifareDesfireApplication(string _applicationMasterKey, DESFireKeyType _keyType, uint _appID = 0, DesfireDeleteAuthMethod _authMethod = DesfireDeleteAuthMethod.PiccMasterKey)
         {
             try
             {
-                // The excepted memory tree
-                DESFireLocation location = new DESFireLocation
-                {
-                    // The Application ID to use
-                    aid = _appID,
-                    // File communication requires encryption
-                    securityLevel = LibLogicalAccess.Card.EncryptionMode.CM_ENCRYPT
-                };
-
-                // IDESFireEV1Commands cmd;
-                // Keys to use for authentication
                 var masterKey = MakeDesfireKey((LibLogicalAccess.Card.DESFireKeyType)_keyType, _applicationMasterKey);
-
-                // Per the DESFire spec, DeleteApplication can also be authorized by authenticating
-                // directly to the target application with its own master key - which is frequently
-                // different from the PICC master key above. Fall back to reusing the PICC key only
-                // when no distinct application key was supplied, to preserve old call sites' behavior.
-                var appOwnKey = masterKey;
-                if (!string.IsNullOrEmpty(_applicationOwnMasterKey))
-                {
-                    appOwnKey = MakeDesfireKey((LibLogicalAccess.Card.DESFireKeyType)(_applicationOwnMasterKeyType ?? _keyType), _applicationOwnMasterKey);
-                }
 
                 if (await tryInitReader())
                 {
@@ -1974,89 +1952,40 @@ namespace RFiDGear.Infrastructure.ReaderProviders
                         card.getCardType() == "DESFireEV3")
                     {
                         var cmd = card.getCommands() as DESFireCommands;
-
-                        if (!authenticateToPICCFirst)
-                        {
-                            // Single attempt: skip authentication entirely. Only succeeds if the
-                            // PICC's configuration allows free application deletion; otherwise the
-                            // card rejects the command and we classify the error below without
-                            // retrying (a retry belongs to the caller, not this provider).
-                            try
-                            {
-                                cmd.selectApplication(0);
-                                cmd.deleteApplication(_appID);
-                                return ERROR.NoError;
-                            }
-                            catch (Exception e)
-                            {
-                                if (e.Message != "" && e.Message.Contains("same number already exists"))
-                                {
-                                    return ERROR.ProtocolConstraint;
-                                }
-                                else if (e.Message != "" && e.Message.Contains("status does not allow the requested command"))
-                                {
-                                    return ERROR.AuthFailure;
-                                }
-                                else
-                                    return ERROR.TransportError;
-                            }
-                        }
-
+                        var appPresentBeforeDelete = false;
+                        var deleteIssued = false;
                         try
                         {
-                            cmd.selectApplication(0);
-                            cmd.authenticate(0, masterKey);
-
+                            // For PICC-level auth: select AID=0 and authenticate with PICC master key.
+                            // For app-level auth: select the target AID and authenticate with its master key 0.
+                            if (_authMethod == DesfireDeleteAuthMethod.ApplicationMasterKey0)
+                            {
+                                cmd.selectApplication(_appID);
+                                appPresentBeforeDelete = true; // selecting the AID succeeded, so it exists
+                                cmd.authenticate(0, masterKey);
+                            }
+                            else
+                            {
+                                cmd.selectApplication(0);
+                                cmd.authenticate(0, masterKey);
+                                appPresentBeforeDelete = IsDesfireApplicationListed(cmd, _appID) == true;
+                            }
+                            deleteIssued = true;
                             cmd.deleteApplication(_appID);
                             return ERROR.NoError;
                         }
-                        catch
+                        catch (Exception e)
                         {
-                            try
-                            {
-                                // Fallback: authenticate directly to the target application with its
-                                // own master key (appOwnKey) rather than the PICC key. A fresh
-                                // SelectApplication resets whatever authentication state the failed
-                                // attempt above left behind, so this is a clean, independent attempt.
-                                cmd.selectApplication(_appID);
-                                cmd.authenticate(0, appOwnKey);
-                                cmd.deleteApplication(_appID);
+                            // The delete can throw even though it succeeded on the card: the library's bookkeeping
+                            // can break while tearing down the context of the application that was just deleted.
+                            // Only when the AID was present and the delete command was actually issued, check the
+                            // real outcome instead of trusting the exception.
+                            if (deleteIssued && appPresentBeforeDelete && IsDesfireApplicationListed(cmd, _appID) == false)
                                 return ERROR.NoError;
-                            }
 
-                            catch (Exception e)
-                            {
-                                // The delete can throw here even when it actually succeeded on the
-                                // card: we just selected and authenticated to the very application
-                                // we deleted, and tearing down that context afterward can upset the
-                                // underlying library's bookkeeping. Verify the real outcome (is the
-                                // AppID still present?) rather than trusting the exception blindly.
-                                try
-                                {
-                                    cmd.selectApplication(0);
-                                    UIntCollection remainingAppIDs = cmd.getApplicationIDs();
-                                    if (remainingAppIDs == null || !remainingAppIDs.ToArray().Contains(_appID))
-                                    {
-                                        return ERROR.NoError;
-                                    }
-                                }
-                                catch
-                                {
-                                    // Verification itself failed - fall through and classify the
-                                    // original exception below instead.
-                                }
-
-                                if (e.Message != "" && e.Message.Contains("same number already exists"))
-                                {
-                                    return ERROR.ProtocolConstraint;
-                                }
-                                else if (e.Message != "" && e.Message.Contains("status does not allow the requested command"))
-                                {
-                                    return ERROR.AuthFailure;
-                                }
-                                else
-                                    return ERROR.TransportError;
-                            }
+                            if (e.Message != "" && e.Message.Contains("status does not allow the requested command"))
+                                return ERROR.AuthFailure;
+                            return ERROR.AuthFailure;
                         }
                     }
                     return ERROR.TransportError;
@@ -2066,6 +1995,24 @@ namespace RFiDGear.Infrastructure.ReaderProviders
             catch
             {
                 return ERROR.TransportError;
+            }
+        }
+
+        /// <summary>
+        /// Checks whether an AID is present in the PICC's application directory.
+        /// Returns <c>null</c> when the directory could not be read (e.g. listing requires PICC authentication).
+        /// </summary>
+        private static bool? IsDesfireApplicationListed(DESFireCommands cmd, uint appId)
+        {
+            try
+            {
+                cmd.selectApplication(0);
+                UIntCollection appIDs = cmd.getApplicationIDs();
+                return appIDs != null && appIDs.ToArray().Contains(appId);
+            }
+            catch
+            {
+                return null;
             }
         }
 

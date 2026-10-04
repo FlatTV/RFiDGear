@@ -794,6 +794,15 @@ Wird benötigt von:
   <data name="buttonContentMifareDesfireAppCreationDeleteApp" xml:space="preserve">
     <value>Applikation löschen</value>
   </data>
+  <data name="labelDesfireDeleteAuthMethod" xml:space="preserve">
+    <value>Authentifizierungsmethode</value>
+  </data>
+  <data name="ENUM.DesfireDeleteAuthMethod.PiccMasterKey" xml:space="preserve">
+    <value>PICC Masterkey</value>
+  </data>
+  <data name="ENUM.DesfireDeleteAuthMethod.ApplicationMasterKey0" xml:space="preserve">
+    <value>App Masterkey</value>
+  </data>
   <data name="buttonContentMifareDesfireKeyChangeAuthenticate" xml:space="preserve">
     <value>Mit App Schlüssel Authentifizieren</value>
   </data>
@@ -1412,8 +1421,11 @@ Needed by:
     <value>Über RFiDGear</value>
   </data>
   <data name="textBoxTextAboutRFiDGear" xml:space="preserve">
-    <value>Your Essential Gear for RFID Encoding
-https://github.com/c3rebro/rfidgear</value>
+    <value>FlatTV fork von c3rebro/RFiDGear
+https://github.com/FlatTV/RFiDGear
+
+Originalprojekt:
+https://github.com/c3rebro/RFiDGear</value>
   </data>
   <data name="ENUM.TaskType_MifareClassicTask.EmptyCheck" xml:space="preserve">
     <value>Sektor-Unbenutzt Prüfung</value>
