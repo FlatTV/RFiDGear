@@ -906,6 +906,7 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
                 OnPropertyChanged(nameof(ShowFileAccessRights));
                 OnPropertyChanged(nameof(ShowFileAuthoringCommands));
                 OnPropertyChanged(nameof(ShowChangeFileSettingsButton));
+                OnPropertyChanged(nameof(ShowFileAuthMethodInput));
 
                 UpdateOldAppKeyDefaults();
             }
@@ -1066,6 +1067,15 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
         /// </summary>
         [XmlIgnore]
         public bool ShowChangeFileSettingsButton => SelectedTaskType == TaskType_MifareDesfireTask.ChangeFileSettings;
+
+        /// <summary>
+        /// Gets a value indicating whether the file authentication method selector should be shown
+        /// (create file, delete file, change file settings).
+        /// </summary>
+        [XmlIgnore]
+        public bool ShowFileAuthMethodInput => SelectedTaskType == TaskType_MifareDesfireTask.CreateFile
+                                               || SelectedTaskType == TaskType_MifareDesfireTask.DeleteFile
+                                               || SelectedTaskType == TaskType_MifareDesfireTask.ChangeFileSettings;
 
         /// <summary>
         /// Gets a value indicating whether application creation inputs should be shown.
@@ -1498,6 +1508,25 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
             }
         }
         private DesfireDeleteAuthMethod selectedDesfireDeleteAuthMethod = DesfireDeleteAuthMethod.PiccMasterKey;
+
+        /// <summary>
+        /// Selects whether the file tasks (create, delete, change file settings) authenticate with the
+        /// application key first or are sent without authentication.
+        /// Persisted so project files remember the chosen method.
+        /// Defaults to <see cref="DesfireFileAuthMethod.ApplicationKey"/> for backward compatibility.
+        /// </summary>
+        public DesfireFileAuthMethod SelectedDesfireFileAuthMethod
+        {
+            get => selectedDesfireFileAuthMethod;
+            set
+            {
+                selectedDesfireFileAuthMethod = value;
+                OnPropertyChanged(nameof(SelectedDesfireFileAuthMethod));
+            }
+        }
+        private DesfireFileAuthMethod selectedDesfireFileAuthMethod = DesfireFileAuthMethod.ApplicationKey;
+
+        private bool UseFileAuthentication => SelectedDesfireFileAuthMethod == DesfireFileAuthMethod.ApplicationKey;
 
         /// <summary>
         ///
@@ -2746,10 +2775,11 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
 
                     StatusText = string.Format("{0}: {1}\n", DateTime.Now, ResourceLoader.GetResource("textBoxStatusTextBoxDllLoaded"));
 
-                    if (IsValidDesfireKeyValue(DesfireAppKeyCurrent, SelectedDesfireAppKeyEncryptionTypeCurrent) && IsValidAppNumberNew != false)
+                    if ((!UseFileAuthentication || IsValidDesfireKeyValue(DesfireAppKeyCurrent, SelectedDesfireAppKeyEncryptionTypeCurrent)) && IsValidAppNumberNew != false)
                     {
                         // The provider owns the complete DESFire operation boundary:
-                        // SearchTag (TWN4 LEGIC) -> Select -> Authenticate -> CreateFile.
+                        // SearchTag (TWN4 LEGIC) -> Select -> [Authenticate] -> CreateFile.
+                        // Authentication is skipped when SelectedDesfireFileAuthMethod is NoAuthentication.
                         var result = await device.CreateMifareDesfireFile(
                             DesfireAppKeyCurrent,
                             SelectedDesfireAppKeyEncryptionTypeCurrent,
@@ -2758,7 +2788,8 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
                             SelectedDesfireFileCryptoMode,
                             AppNumberCurrentAsInt,
                             FileNumberCurrentAsInt,
-                            FileSizeCurrentAsInt);
+                            FileSizeCurrentAsInt,
+                            _authMethod: SelectedDesfireFileAuthMethod);
 
                         if (result == ERROR.NoError)
                         {
@@ -3770,7 +3801,28 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
 
                     StatusText = string.Format("{0}: {1}\n", DateTime.Now, ResourceLoader.GetResource("textBoxStatusTextBoxDllLoaded"));
 
-                    if (IsValidDesfireKeyValue(DesfireAppKeyCurrent, SelectedDesfireAppKeyEncryptionTypeCurrent))
+                    if (!UseFileAuthentication)
+                    {
+                        // No authentication: select the application and delete the file directly
+                        // (requires "free create/delete" in the application key settings).
+                        if (IsValidAppNumberCurrent != false)
+                        {
+                            var noAuthResult = await device.DeleteMifareDesfireFile(
+                                DesfireAppKeyCurrent,
+                                SelectedDesfireAppKeyEncryptionTypeCurrent,
+                                AppNumberCurrentAsInt, FileNumberCurrentAsInt,
+                                DesfireFileAuthMethod.NoAuthentication);
+
+                            await SetOperationResultAsync(
+                                noAuthResult,
+                                "{0}: Successfully Deleted File {1}\n",
+                                new object[] { DateTime.Now, FileNumberCurrentAsInt },
+                                "{0}: Unable to Remove FileID {1}: {2}\n",
+                                new object[] { DateTime.Now, FileNumberCurrentAsInt, noAuthResult.ToString() });
+                            return;
+                        }
+                    }
+                    else if (IsValidDesfireKeyValue(DesfireAppKeyCurrent, SelectedDesfireAppKeyEncryptionTypeCurrent))
                     {
                         var result = await device.AuthToMifareDesfireApplication(
                                 DesfireAppKeyCurrent,
@@ -4161,7 +4213,7 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
                     await UpdateReaderStatusCommand.ExecuteAsync(true);
                     StatusText = string.Format("{0}: {1}\n", DateTime.Now, ResourceLoader.GetResource("textBoxStatusTextBoxDllLoaded"));
 
-                    if (CustomConverter.FormatMifareDesfireKeyStringWithSpacesEachByte(DesfireAppKeyCurrent, SelectedDesfireAppKeyEncryptionTypeCurrent) == KEY_ERROR.NO_ERROR)
+                    if (!UseFileAuthentication || CustomConverter.FormatMifareDesfireKeyStringWithSpacesEachByte(DesfireAppKeyCurrent, SelectedDesfireAppKeyEncryptionTypeCurrent) == KEY_ERROR.NO_ERROR)
                     {
                         var result = await device.ChangeMifareDesfireFileSettings(
                             DesfireAppKeyCurrent,
@@ -4170,7 +4222,8 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
                             accessRights,
                             SelectedDesfireFileCryptoMode,
                             AppNumberCurrentAsInt,
-                            FileNumberCurrentAsInt);
+                            FileNumberCurrentAsInt,
+                            SelectedDesfireFileAuthMethod);
 
                         if (await SetOperationResultAsync(
                                 result,

@@ -803,6 +803,15 @@ Wird benötigt von:
   <data name="ENUM.DesfireDeleteAuthMethod.ApplicationMasterKey0" xml:space="preserve">
     <value>App Masterkey</value>
   </data>
+  <data name="labelDesfireFileAuthMethod" xml:space="preserve">
+    <value>Authentifizierungsmethode</value>
+  </data>
+  <data name="ENUM.DesfireFileAuthMethod.ApplicationKey" xml:space="preserve">
+    <value>Mit App-Schlüssel authentifizieren</value>
+  </data>
+  <data name="ENUM.DesfireFileAuthMethod.NoAuthentication" xml:space="preserve">
+    <value>Ohne Authentifizierung</value>
+  </data>
   <data name="buttonContentMifareDesfireKeyChangeAuthenticate" xml:space="preserve">
     <value>Mit App Schlüssel Authentifizieren</value>
   </data>

@@ -88,6 +88,35 @@ namespace RFiDGear.Tests
         }
 
         [Fact]
+        public async Task CreateMifareDesfireFile_NoAuthentication_SelectsWithoutAuthenticating()
+        {
+            var provider = new CreateFileTestProvider(authResult: ERROR.AuthFailure);
+            var accessRights = new DESFireAccessRights
+            {
+                readAccess = TaskAccessRights.AR_KEY0,
+                writeAccess = TaskAccessRights.AR_KEY0,
+                readAndWriteAccess = TaskAccessRights.AR_KEY0,
+                changeAccess = TaskAccessRights.AR_KEY0
+            };
+
+            var result = await provider.CreateMifareDesfireFile(
+                _appMasterKey: string.Empty,
+                _keyTypeAppMasterKey: DESFireKeyType.DF_KEY_AES,
+                _fileType: Infrastructure.Tasks.FileType_MifareDesfireFileType.StdDataFile,
+                _accessRights: accessRights,
+                _encMode: RfidEncryptionMode.CM_PLAIN,
+                _appID: 1,
+                _fileNo: 9,
+                _fileSize: 16,
+                _authMethod: DesfireFileAuthMethod.NoAuthentication);
+
+            Assert.Equal(ERROR.NoError, result);
+            Assert.True(provider.StdDataFileRequested);
+            Assert.Equal(0, provider.AuthCalls);
+            Assert.Equal(1, provider.SelectCalls);
+        }
+
+        [Fact]
         public async Task CreateMifareDesfireFile_AuthFails_PropagatesError()
         {
             var provider = new CreateFileTestProvider(authResult: ERROR.AuthFailure);
@@ -250,6 +279,8 @@ namespace RFiDGear.Tests
 
             public bool BackupFileRequested { get; private set; }
             public bool StdDataFileRequested { get; private set; }
+            public int AuthCalls { get; private set; }
+            public int SelectCalls { get; private set; }
 
             public override bool IsConnected => true;
 
@@ -260,7 +291,16 @@ namespace RFiDGear.Tests
             }
 
             protected override Task<ERROR> AuthToMifareDesfireApplicationCore(string key, DESFireKeyType keyType, int keyNumber, int appId)
-                => Task.FromResult(_authResult);
+            {
+                AuthCalls++;
+                return Task.FromResult(_authResult);
+            }
+
+            protected override Task<ERROR> SelectMifareDesfireApplicationCore(int appId, int keyNumber)
+            {
+                SelectCalls++;
+                return Task.FromResult(ERROR.NoError);
+            }
 
             protected override Task CreateStdDataFileAsync(byte fileNo, Infrastructure.Tasks.FileType_MifareDesfireFileType fileType, RfidEncryptionMode encMode, DESFireFileAccessRights accessRights, uint fileSize)
             {

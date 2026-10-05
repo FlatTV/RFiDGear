@@ -202,11 +202,13 @@ namespace RFiDGear.Infrastructure.ReaderProviders
         /// <param name="_initValue">Initial value of a record file type.</param>
         /// <param name="_isValueLimited">Whether the value file enforces limits.</param>
         /// <param name="_maxNbOfRecords">Maximum number of records for record-based file types.</param>
+        /// <param name="_authMethod">Authenticate with the application key first (default) or send the command without authentication.</param>
         /// <returns cref="ERROR">Result of the operation.</returns>
         public abstract Task<ERROR> CreateMifareDesfireFile(string _appMasterKey, DESFireKeyType _keyTypeAppMasterKey, FileType_MifareDesfireFileType _fileType, DESFireAccessRights _accessRights, EncryptionMode _encMode,
                                         int _appID, int _fileNo, int _fileSize,
                                         int _minValue = 0, int _maxValue = 1000, int _initValue = 0, bool _isValueLimited = false,
-                                        int _maxNbOfRecords = 100);
+                                        int _maxNbOfRecords = 100,
+                                        DesfireFileAuthMethod _authMethod = DesfireFileAuthMethod.ApplicationKey);
 
         /// <summary>
         /// Reads a MIFARE DESFire file from the specified application using the provided application keys.
@@ -405,12 +407,14 @@ namespace RFiDGear.Infrastructure.ReaderProviders
         /// <param name="newEncMode">Desired communication mode for the file (plain, MAC'd, or fully encrypted).</param>
         /// <param name="appId">Application identifier that owns the file; 0 selects the PICC level.</param>
         /// <param name="fileNo">File number within the application to reconfigure.</param>
+        /// <param name="_authMethod">Authenticate with the change key first (default) or send the command without authentication (requires a free change access right on the file).</param>
         /// <returns>
         /// <see cref="ERROR.NoError"/> on success;
         /// <see cref="ERROR.AuthFailure"/> when authentication or key pre-fetch fails;
         /// <see cref="ERROR.TransportError"/> on reader communication failure.
         /// </returns>
-        public abstract Task<ERROR> ChangeMifareDesfireFileSettings(string changeKeyHex, DESFireKeyType changeKeyType, int changeKeyNo, DESFireAccessRights newAccessRights, EncryptionMode newEncMode, int appId = 0, int fileNo = 0);
+        public abstract Task<ERROR> ChangeMifareDesfireFileSettings(string changeKeyHex, DESFireKeyType changeKeyType, int changeKeyNo, DESFireAccessRights newAccessRights, EncryptionMode newEncMode, int appId = 0, int fileNo = 0,
+                                                                  DesfireFileAuthMethod _authMethod = DesfireFileAuthMethod.ApplicationKey);
 
         /// <summary>
         /// Deletes a MIFARE DESFire application after authenticating to PICC Lvl (AppID = 0, KeyNo = 0).
@@ -432,8 +436,10 @@ namespace RFiDGear.Infrastructure.ReaderProviders
         /// <param name="_keyType">Cryptographic type of the current master key. (byte): 3DES, 3K3DES, AES</param>
         /// <param name="_appID">The app ID that contains the file to be deleted.</param>
         /// <param name="_fileID">The ID of the File that should be deleted.</param>
+        /// <param name="_authMethod">Authenticate with the application key first (default) or delete without authentication (requires free create/delete in the app key settings).</param>
         /// <returns></returns>
-        public abstract Task<ERROR> DeleteMifareDesfireFile(string _applicationMasterKey, DESFireKeyType _keyType, int _appID = 0, int _fileID = 0);
+        public abstract Task<ERROR> DeleteMifareDesfireFile(string _applicationMasterKey, DESFireKeyType _keyType, int _appID = 0, int _fileID = 0,
+                                                                  DesfireFileAuthMethod _authMethod = DesfireFileAuthMethod.ApplicationKey);
 
         /// <summary>
         /// Authenticates to and formats a Desfire Card

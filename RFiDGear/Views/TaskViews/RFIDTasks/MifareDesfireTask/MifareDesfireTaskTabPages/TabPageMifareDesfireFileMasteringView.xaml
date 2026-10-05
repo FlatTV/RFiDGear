@@ -288,6 +288,27 @@
                         VerticalAlignment="Stretch"
                         ItemsSource="{dal:Enumerate {x:Type tasks:FileType_MifareDesfireFileType}}"
                         SelectedItem="{Binding SelectedDesfireFileType, Converter={StaticResource Localization}, ConverterParameter={x:Type tasks:FileType_MifareDesfireFileType}, UpdateSourceTrigger=PropertyChanged, Mode=TwoWay}" />
+                    <Label
+                        Grid.Row="5"
+                        Grid.Column="0"
+                        Margin="8,0,8,8"
+                        HorizontalAlignment="Stretch"
+                        VerticalAlignment="Top"
+                        HorizontalContentAlignment="Left"
+                        VerticalContentAlignment="Center"
+                        Visibility="{Binding ShowFileAuthMethodInput, Converter={StaticResource BoolToVisConv}}"
+                        Content="{Binding LocalizationResourceSet, Converter={StaticResource Localization}, ConverterParameter='labelDesfireFileAuthMethod'}" />
+                    <ComboBox
+                        x:Name="fileAuthMethodCB"
+                        Grid.Row="5"
+                        Grid.Column="1"
+                        Margin="8,0,8,8"
+                        Height="26"
+                        HorizontalAlignment="Stretch"
+                        VerticalAlignment="Top"
+                        ItemsSource="{dal:Enumerate {x:Type dal:DesfireFileAuthMethod}}"
+                        Visibility="{Binding ShowFileAuthMethodInput, Converter={StaticResource BoolToVisConv}}"
+                        SelectedItem="{Binding SelectedDesfireFileAuthMethod, Converter={StaticResource Localization}, ConverterParameter={x:Type dal:DesfireFileAuthMethod}, UpdateSourceTrigger=PropertyChanged, Mode=TwoWay}" />
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="auto" />
                         <ColumnDefinition Width=".3*" />

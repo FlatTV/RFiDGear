@@ -41,6 +41,26 @@ namespace RFiDGear.Infrastructure
     }
 
     /// <summary>
+    /// Determines whether and how the session authenticates before a DESFire file command
+    /// (<c>CreateStdDataFile</c>, <c>DeleteFile</c>, <c>ChangeFileSettings</c>).
+    /// </summary>
+    public enum DesfireFileAuthMethod
+    {
+        /// <summary>
+        /// Select the application and authenticate with the configured application key before the command.
+        /// This is the behavior of previous versions and the default.
+        /// </summary>
+        ApplicationKey,
+
+        /// <summary>
+        /// Select the application and send the command without authenticating.
+        /// Create/Delete require application key-settings bit 2 (free create/delete) to be set;
+        /// ChangeFileSettings requires the file's change access right to be "free".
+        /// </summary>
+        NoAuthentication
+    }
+
+    /// <summary>
     /// Supported DESFire key cryptographic types.
     /// </summary>
     [Flags]

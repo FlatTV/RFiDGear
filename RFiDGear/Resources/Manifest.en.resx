@@ -787,6 +787,15 @@ Needed by:
   <data name="ENUM.DesfireDeleteAuthMethod.ApplicationMasterKey0" xml:space="preserve">
     <value>Application master key</value>
   </data>
+  <data name="labelDesfireFileAuthMethod" xml:space="preserve">
+    <value>Authentication method</value>
+  </data>
+  <data name="ENUM.DesfireFileAuthMethod.ApplicationKey" xml:space="preserve">
+    <value>Authenticate with application key</value>
+  </data>
+  <data name="ENUM.DesfireFileAuthMethod.NoAuthentication" xml:space="preserve">
+    <value>No authentication</value>
+  </data>
   <data name="buttonContentMifareDesfireKeyChangeAuthenticate" xml:space="preserve">
     <value>Authenticate with App Key</value>
   </data>

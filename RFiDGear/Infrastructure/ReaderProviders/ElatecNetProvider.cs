@@ -585,7 +585,10 @@ namespace RFiDGear.Infrastructure.ReaderProviders
             }
         }
 
-        protected virtual async Task<ERROR> AuthToMifareDesfireApplicationCore(string _applicationMasterKey, DESFireKeyType _keyType, int _keyNumber, int _appID)
+        /// <summary>
+        /// Establishes the DESFire context (SearchTag + SelectApplication, up to three attempts) without authenticating.
+        /// </summary>
+        protected virtual async Task<ERROR> SelectMifareDesfireApplicationCore(int _appID, int _keyNumber)
         {
             if (!IsConnected)
             {
@@ -626,6 +629,27 @@ namespace RFiDGear.Infrastructure.ReaderProviders
                     "Elatec DESFire SearchTag/Select failed after 3 attempts for AppId {AppId} KeyNo {KeyNumber}.",
                     _appID, _keyNumber);
                 return ERROR.TransportError;
+            }
+
+            return ERROR.NoError;
+        }
+
+        private Task<ERROR> EstablishDesfireFileContextAsync(DesfireFileAuthMethod _authMethod, string _key, DESFireKeyType _keyType, int _keyNumber, int _appID)
+            => _authMethod == DesfireFileAuthMethod.NoAuthentication
+                ? SelectMifareDesfireApplicationCore(_appID, _keyNumber)
+                : AuthToMifareDesfireApplicationCore(_key, _keyType, _keyNumber, _appID);
+
+        protected virtual async Task<ERROR> AuthToMifareDesfireApplicationCore(string _applicationMasterKey, DESFireKeyType _keyType, int _keyNumber, int _appID)
+        {
+            if (!IsConnected)
+            {
+                return ERROR.TransportError;
+            }
+
+            var selectResult = await SelectMifareDesfireApplicationCore(_appID, _keyNumber);
+            if (selectResult != ERROR.NoError)
+            {
+                return selectResult;
             }
 
             try
@@ -1136,7 +1160,8 @@ namespace RFiDGear.Infrastructure.ReaderProviders
         }
 
         /// <inheritdoc />
-        public async override Task<ERROR> ChangeMifareDesfireFileSettings(string changeKeyHex, DESFireKeyType changeKeyType, int changeKeyNo, DESFireAccessRights newAccessRights, EncryptionMode newEncMode, int appId = 0, int fileNo = 0)
+        public async override Task<ERROR> ChangeMifareDesfireFileSettings(string changeKeyHex, DESFireKeyType changeKeyType, int changeKeyNo, DESFireAccessRights newAccessRights, EncryptionMode newEncMode, int appId = 0, int fileNo = 0,
+                                                                    DesfireFileAuthMethod _authMethod = DesfireFileAuthMethod.ApplicationKey)
         {
             await _comPortLock.WaitAsync();
             try
@@ -1149,12 +1174,15 @@ namespace RFiDGear.Infrastructure.ReaderProviders
                     {
                         await readerDevice.MifareDesfire_SelectApplicationAsync((uint)appId);
 
-                        await readerDevice.MifareDesfire_AuthenticateAsync(
-                            changeKeyHex,
-                            (byte)changeKeyNo,
-                            (byte)(int)Enum.Parse(typeof(Elatec.NET.Cards.Mifare.DESFireKeyType),
-                            Enum.GetName(typeof(DESFireKeyType), changeKeyType)),
-                            1);
+                        if (_authMethod == DesfireFileAuthMethod.ApplicationKey)
+                        {
+                            await readerDevice.MifareDesfire_AuthenticateAsync(
+                                changeKeyHex,
+                                (byte)changeKeyNo,
+                                (byte)(int)Enum.Parse(typeof(Elatec.NET.Cards.Mifare.DESFireKeyType),
+                                Enum.GetName(typeof(DESFireKeyType), changeKeyType)),
+                                1);
+                        }
 
                         var rawSettings = await readerDevice.MifareDesfire_GetFileSettingsAsync((byte)fileNo);
                         if (rawSettings == null)
@@ -1229,7 +1257,8 @@ namespace RFiDGear.Infrastructure.ReaderProviders
         }
 
         /// <inheritdoc />
-        public async override Task<ERROR> DeleteMifareDesfireFile(string _applicationMasterKey, DESFireKeyType _keyType, int _appID, int _fileID)
+        public async override Task<ERROR> DeleteMifareDesfireFile(string _applicationMasterKey, DESFireKeyType _keyType, int _appID, int _fileID,
+                                                                    DesfireFileAuthMethod _authMethod = DesfireFileAuthMethod.ApplicationKey)
         {
             await _comPortLock.WaitAsync();
             try
@@ -1247,18 +1276,19 @@ namespace RFiDGear.Infrastructure.ReaderProviders
 
                 try
                 {
-                    if (await AuthToMifareDesfireApplicationCore(_applicationMasterKey, _keyType, 0, _appID) == ERROR.NoError)
+                    var contextResult = await EstablishDesfireFileContextAsync(_authMethod, _applicationMasterKey, _keyType, 0, _appID);
+                    if (contextResult == ERROR.NoError)
                     {
                         await readerDevice.MifareDesfire_DeleteFileAsync((byte)_fileID);
                     }
                     else
                     {
-                        return ERROR.AuthFailure;
+                        return _authMethod == DesfireFileAuthMethod.NoAuthentication ? contextResult : ERROR.AuthFailure;
                     }
                 }
                 catch
                 {
-                    return ERROR.AuthFailure;
+                    return _authMethod == DesfireFileAuthMethod.NoAuthentication ? ERROR.PermissionDenied : ERROR.AuthFailure;
                 }
                 return ERROR.NoError;
             }
@@ -1449,7 +1479,8 @@ namespace RFiDGear.Infrastructure.ReaderProviders
         public async override Task<ERROR> CreateMifareDesfireFile(string _appMasterKey, DESFireKeyType _keyTypeAppMasterKey, FileType_MifareDesfireFileType _fileType, DESFireAccessRights _accessRights, EncryptionMode _encMode,
                                      int _appID, int _fileNo, int _fileSize,
                                      int _minValue = 0, int _maxValue = 1000, int _initValue = 0, bool _isValueLimited = false,
-                                     int _maxNbOfRecords = 100)
+                                     int _maxNbOfRecords = 100,
+                                     DesfireFileAuthMethod _authMethod = DesfireFileAuthMethod.ApplicationKey)
         {
             await _comPortLock.WaitAsync();
             try
@@ -1458,7 +1489,7 @@ namespace RFiDGear.Infrastructure.ReaderProviders
             {
                 try
                 {
-                    var authResult = await AuthToMifareDesfireApplicationCore(_appMasterKey, _keyTypeAppMasterKey, 0, _appID);
+                    var authResult = await EstablishDesfireFileContextAsync(_authMethod, _appMasterKey, _keyTypeAppMasterKey, 0, _appID);
                     if (authResult != ERROR.NoError)
                         return authResult;
 

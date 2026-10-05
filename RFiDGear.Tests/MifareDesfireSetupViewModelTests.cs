@@ -696,6 +696,66 @@ namespace RFiDGear.Tests
         }
 
         [Fact]
+        public async Task CreateFileCommand_WithoutAuthentication_PassesAuthMethodAndSkipsKeyValidation()
+        {
+            await RunOnStaThreadAsync(async () =>
+            {
+                var fakeProvider = new FakeElatecNetProvider();
+                var viewModel = new MifareDesfireSetupViewModel
+                {
+                    AppNumberCurrent = "1",
+                    AppNumberNew = "1",
+                    FileNumberCurrent = "0",
+                    FileSizeCurrent = "16",
+                    SelectedDesfireFileAuthMethod = DesfireFileAuthMethod.NoAuthentication
+                };
+
+                var originalReader = ReaderDevice.Reader;
+                var originalInstance = GetReaderDeviceInstance();
+                try
+                {
+                    ReaderDevice.Reader = ReaderTypes.Elatec;
+                    SetReaderDeviceInstance(fakeProvider);
+
+                    await viewModel.CreateFileCommand.ExecuteAsync(null);
+
+                    Assert.Equal(1, fakeProvider.CreateFileCalls);
+                    Assert.Equal(DesfireFileAuthMethod.NoAuthentication, fakeProvider.LastCreateFileAuthMethod);
+                }
+                finally
+                {
+                    ReaderDevice.Reader = originalReader;
+                    SetReaderDeviceInstance(originalInstance);
+                }
+            });
+        }
+
+        [Fact]
+        public async Task SelectedDesfireFileAuthMethod_DefaultsToApplicationKey()
+        {
+            await RunOnStaThreadAsync(() =>
+            {
+                var viewModel = new MifareDesfireSetupViewModel();
+                Assert.Equal(DesfireFileAuthMethod.ApplicationKey, viewModel.SelectedDesfireFileAuthMethod);
+            });
+        }
+
+        [Theory]
+        [InlineData(TaskType_MifareDesfireTask.CreateFile, true)]
+        [InlineData(TaskType_MifareDesfireTask.DeleteFile, true)]
+        [InlineData(TaskType_MifareDesfireTask.ChangeFileSettings, true)]
+        [InlineData(TaskType_MifareDesfireTask.ReadData, false)]
+        [InlineData(TaskType_MifareDesfireTask.WriteData, false)]
+        public async Task SelectedTaskType_TogglesFileAuthMethodInput(TaskType_MifareDesfireTask taskType, bool expected)
+        {
+            await RunOnStaThreadAsync(() =>
+            {
+                var viewModel = new MifareDesfireSetupViewModel { SelectedTaskType = taskType };
+                Assert.Equal(expected, viewModel.ShowFileAuthMethodInput);
+            });
+        }
+
+        [Fact]
         public async Task CreateApplicationCommand_UsesProviderOwnedAuthentication()
         {
             await RunOnStaThreadAsync(async () =>
@@ -781,6 +841,7 @@ namespace RFiDGear.Tests
             public int LastWriteKeyNumber { get; private set; }
             public string LastCreateFileKey { get; private set; }
             public int CreateFileCalls { get; private set; }
+            public DesfireFileAuthMethod LastCreateFileAuthMethod { get; private set; }
             public string LastCreateApplicationKey { get; private set; }
             public int CreateApplicationCalls { get; private set; }
 
@@ -816,8 +877,10 @@ namespace RFiDGear.Tests
             public override Task<ERROR> CreateMifareDesfireFile(string _appMasterKey, DESFireKeyType _keyTypeAppMasterKey,
                 FileType_MifareDesfireFileType _fileType, DESFireAccessRights _accessRights, EncryptionMode _encMode,
                 int _appID, int _fileNo, int _fileSize, int _minValue = 0, int _maxValue = 1000,
-                int _initValue = 0, bool _isValueLimited = false, int _maxNbOfRecords = 100)
+                int _initValue = 0, bool _isValueLimited = false, int _maxNbOfRecords = 100,
+                DesfireFileAuthMethod _authMethod = DesfireFileAuthMethod.ApplicationKey)
             {
+                LastCreateFileAuthMethod = _authMethod;
                 _ = _keyTypeAppMasterKey;
                 _ = _fileType;
                 _ = _accessRights;

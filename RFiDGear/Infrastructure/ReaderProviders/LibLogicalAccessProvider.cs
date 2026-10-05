@@ -1015,13 +1015,16 @@ namespace RFiDGear.Infrastructure.ReaderProviders
         public override async Task<ERROR> CreateMifareDesfireFile(string _appMasterKey, DESFireKeyType _keyTypeAppMasterKey, FileType_MifareDesfireFileType _fileType, DESFireAccessRights _accessRights, EncryptionMode _encMode,
                                              int _appID, int _fileNo, int _fileSize,
                                              int _minValue = 0, int _maxValue = 1000, int _initValue = 0, bool _isValueLimited = false,
-                                             int _maxNbOfRecords = 100)
+                                             int _maxNbOfRecords = 100,
+                                             DesfireFileAuthMethod _authMethod = DesfireFileAuthMethod.ApplicationKey)
         {
             try
             {
                 DESFireAccessRights accessRights = _accessRights;
 
-                var masterKey = MakeDesfireKey((LibLogicalAccess.Card.DESFireKeyType)_keyTypeAppMasterKey, _appMasterKey);
+                var masterKey = _authMethod == DesfireFileAuthMethod.ApplicationKey
+                    ? MakeDesfireKey((LibLogicalAccess.Card.DESFireKeyType)_keyTypeAppMasterKey, _appMasterKey)
+                    : null;
 
                 var arToUse = new LibLogicalAccess.Card.DESFireAccessRights()
                 {
@@ -1056,7 +1059,11 @@ namespace RFiDGear.Infrastructure.ReaderProviders
 
 
                         cmd.selectApplication((uint)_appID);
-                        cmd.authenticate(0, masterKey);
+
+                        if (_authMethod == DesfireFileAuthMethod.ApplicationKey)
+                        {
+                            cmd.authenticate(0, masterKey);
+                        }
 
                         switch (_fileType)
                         {
@@ -1884,11 +1891,14 @@ namespace RFiDGear.Infrastructure.ReaderProviders
         }
 
         /// <inheritdoc />
-        public override async Task<ERROR> ChangeMifareDesfireFileSettings(string changeKeyHex, DESFireKeyType changeKeyType, int changeKeyNo, DESFireAccessRights newAccessRights, EncryptionMode newEncMode, int appId = 0, int fileNo = 0)
+        public override async Task<ERROR> ChangeMifareDesfireFileSettings(string changeKeyHex, DESFireKeyType changeKeyType, int changeKeyNo, DESFireAccessRights newAccessRights, EncryptionMode newEncMode, int appId = 0, int fileNo = 0,
+                                                                  DesfireFileAuthMethod _authMethod = DesfireFileAuthMethod.ApplicationKey)
         {
             try
             {
-                var changeFileSettingsKey = MakeDesfireKey((LibLogicalAccess.Card.DESFireKeyType)changeKeyType, changeKeyHex);
+                var changeFileSettingsKey = _authMethod == DesfireFileAuthMethod.ApplicationKey
+                    ? MakeDesfireKey((LibLogicalAccess.Card.DESFireKeyType)changeKeyType, changeKeyHex)
+                    : null;
 
                 var arToUse = new LibLogicalAccess.Card.DESFireAccessRights()
                 {
@@ -1911,7 +1921,12 @@ namespace RFiDGear.Infrastructure.ReaderProviders
                         try
                         {
                             cmd.selectApplication((uint)appId);
-                            cmd.authenticate((byte)changeKeyNo, changeFileSettingsKey);
+
+                            if (_authMethod == DesfireFileAuthMethod.ApplicationKey)
+                            {
+                                cmd.authenticate((byte)changeKeyNo, changeFileSettingsKey);
+                            }
+
                             cmd.changeFileSettings((byte)fileNo, (LibLogicalAccess.Card.EncryptionMode)newEncMode, arToUse, false);
 
                             return ERROR.NoError;
@@ -2017,7 +2032,8 @@ namespace RFiDGear.Infrastructure.ReaderProviders
         }
 
         /// <inheritdoc />
-        public override async Task<ERROR> DeleteMifareDesfireFile(string _applicationMasterKey, DESFireKeyType _keyType, int _appID = 0, int _fileID = 0)
+        public override async Task<ERROR> DeleteMifareDesfireFile(string _applicationMasterKey, DESFireKeyType _keyType, int _appID = 0, int _fileID = 0,
+                                                                  DesfireFileAuthMethod _authMethod = DesfireFileAuthMethod.ApplicationKey)
         {
             try
             {
@@ -2030,8 +2046,10 @@ namespace RFiDGear.Infrastructure.ReaderProviders
                     securityLevel = LibLogicalAccess.Card.EncryptionMode.CM_ENCRYPT
                 };
 
-                // Keys to use for authentication
-                var masterKey = MakeDesfireKey((LibLogicalAccess.Card.DESFireKeyType)_keyType, _applicationMasterKey);
+                // Keys to use for authentication (not needed when deleting without authentication)
+                var masterKey = _authMethod == DesfireFileAuthMethod.ApplicationKey
+                    ? MakeDesfireKey((LibLogicalAccess.Card.DESFireKeyType)_keyType, _applicationMasterKey)
+                    : null;
 
                 if (await tryInitReader())
                 {
@@ -2045,6 +2063,13 @@ namespace RFiDGear.Infrastructure.ReaderProviders
                         try
                         {
                             var cmd = card.getCommands() as DESFireCommands;
+
+                            if (_authMethod == DesfireFileAuthMethod.NoAuthentication)
+                            {
+                                cmd.selectApplication((uint)_appID);
+                                cmd.deleteFile((byte)_fileID);
+                                return ERROR.NoError;
+                            }
 
                             try
                             {
