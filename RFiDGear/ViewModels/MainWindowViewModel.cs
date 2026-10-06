@@ -748,6 +748,24 @@ namespace RFiDGear.ViewModel
         }
 
         /// <summary>
+        /// Opens the raw command (APDU) diagnostic dialog.
+        /// </summary>
+        public ICommand NewRawApduDialogCommand => new RelayCommand(OnNewRawApduDialogCommand);
+        private void OnNewRawApduDialogCommand()
+        {
+            Dialogs.Add(new RawApduDialogViewModel()
+            {
+                Caption = ResourceLoader.GetResource("windowCaptionRawApdu"),
+
+                OnCloseRequest = (sender) =>
+                {
+                    sender.Close();
+                    mw.Activate();
+                }
+            });
+        }
+
+        /// <summary>
         /// Show Detailed Version Info
         /// </summary>
         public ICommand NewAboutDialogCommand => new RelayCommand(OnNewNewAboutDialogCommand);

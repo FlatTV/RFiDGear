@@ -803,6 +803,36 @@ Wird benötigt von:
   <data name="ENUM.DesfireDeleteAuthMethod.ApplicationMasterKey0" xml:space="preserve">
     <value>App Masterkey</value>
   </data>
+  <data name="menuItemRawApduHeader" xml:space="preserve">
+    <value>Roh-Befehle (APDU)...</value>
+  </data>
+  <data name="windowCaptionRawApdu" xml:space="preserve">
+    <value>Roh-Befehle senden</value>
+  </data>
+  <data name="labelRawApduCommand" xml:space="preserve">
+    <value>Befehl (Hex)</value>
+  </data>
+  <data name="labelRawApduFraming" xml:space="preserve">
+    <value>Verpackung</value>
+  </data>
+  <data name="buttonRawApduSend" xml:space="preserve">
+    <value>Senden</value>
+  </data>
+  <data name="buttonRawApduClear" xml:space="preserve">
+    <value>Leeren</value>
+  </data>
+  <data name="buttonRawApduClose" xml:space="preserve">
+    <value>Schließen</value>
+  </data>
+  <data name="checkBoxRawApduAllowDestructive" xml:space="preserve">
+    <value>Befehle zulassen, die Karteninhalt ändern oder löschen (z. B. Format PICC, Datei/App anlegen oder löschen)</value>
+  </data>
+  <data name="ENUM.RawApduFraming.NativeDesfire" xml:space="preserve">
+    <value>Natives DESFire (wird als 90 INS 00 00 Lc Daten 00 gesendet)</value>
+  </data>
+  <data name="ENUM.RawApduFraming.ApduAsEntered" xml:space="preserve">
+    <value>APDU unverändert senden</value>
+  </data>
   <data name="labelDesfireFileAuthMethod" xml:space="preserve">
     <value>Authentifizierungsmethode</value>
   </data>

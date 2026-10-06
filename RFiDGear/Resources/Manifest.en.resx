@@ -787,6 +787,36 @@ Needed by:
   <data name="ENUM.DesfireDeleteAuthMethod.ApplicationMasterKey0" xml:space="preserve">
     <value>Application master key</value>
   </data>
+  <data name="menuItemRawApduHeader" xml:space="preserve">
+    <value>Raw commands (APDU)...</value>
+  </data>
+  <data name="windowCaptionRawApdu" xml:space="preserve">
+    <value>Send raw commands</value>
+  </data>
+  <data name="labelRawApduCommand" xml:space="preserve">
+    <value>Command (hex)</value>
+  </data>
+  <data name="labelRawApduFraming" xml:space="preserve">
+    <value>Framing</value>
+  </data>
+  <data name="buttonRawApduSend" xml:space="preserve">
+    <value>Send</value>
+  </data>
+  <data name="buttonRawApduClear" xml:space="preserve">
+    <value>Clear</value>
+  </data>
+  <data name="buttonRawApduClose" xml:space="preserve">
+    <value>Close</value>
+  </data>
+  <data name="checkBoxRawApduAllowDestructive" xml:space="preserve">
+    <value>Allow commands that change or erase card content (e.g. Format PICC, create/delete file or app)</value>
+  </data>
+  <data name="ENUM.RawApduFraming.NativeDesfire" xml:space="preserve">
+    <value>Native DESFire (sent as 90 INS 00 00 Lc data 00)</value>
+  </data>
+  <data name="ENUM.RawApduFraming.ApduAsEntered" xml:space="preserve">
+    <value>Send APDU as entered</value>
+  </data>
   <data name="labelDesfireFileAuthMethod" xml:space="preserve">
     <value>Authentication method</value>
   </data>

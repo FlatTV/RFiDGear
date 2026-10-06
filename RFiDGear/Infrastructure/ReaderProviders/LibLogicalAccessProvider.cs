@@ -1012,6 +1012,69 @@ namespace RFiDGear.Infrastructure.ReaderProviders
         }
 
         /// <inheritdoc />
+        public override bool SupportsRawTransceive => true;
+
+        /// <inheritdoc />
+        /// <remarks>
+        /// Sends the bytes through the reader/card adapter of the present chip. The adapter's result checker
+        /// (which turns card error statuses like <c>91 AE</c> into exceptions) is detached for the call so the
+        /// raw status word is returned; it is restored afterwards.
+        /// </remarks>
+        public override async Task<(ERROR Result, byte[] Response)> TransceiveRawAsync(byte[] command)
+        {
+            try
+            {
+                if (command == null || command.Length == 0)
+                {
+                    return (ERROR.ProtocolConstraint, Array.Empty<byte>());
+                }
+
+                if (!await tryInitReader())
+                {
+                    return (ERROR.TransportError, Array.Empty<byte>());
+                }
+
+                card = readerUnit.getSingleChip();
+                var adapter = card?.getCommands()?.getReaderCardAdapter();
+                if (adapter == null)
+                {
+                    return (ERROR.TransportError, Array.Empty<byte>());
+                }
+
+                var checker = adapter.getResultChecker();
+                var checkerDetached = false;
+                try
+                {
+                    adapter.setResultChecker(null);
+                    checkerDetached = true;
+                }
+                catch (Exception detachException)
+                {
+                    // Keep going: the card status then surfaces as exception text instead of a status word.
+                    LastNativeErrorMessage = detachException.ToString();
+                }
+
+                try
+                {
+                    var response = adapter.sendCommand(new ByteVector(command), 3000);
+                    return (ERROR.NoError, response.ToArray());
+                }
+                finally
+                {
+                    if (checkerDetached)
+                    {
+                        adapter.setResultChecker(checker);
+                    }
+                }
+            }
+            catch (Exception e)
+            {
+                LastNativeErrorMessage = e.ToString();
+                return (ERROR.TransportError, Array.Empty<byte>());
+            }
+        }
+
+        /// <inheritdoc />
         public override async Task<ERROR> CreateMifareDesfireFile(string _appMasterKey, DESFireKeyType _keyTypeAppMasterKey, FileType_MifareDesfireFileType _fileType, DESFireAccessRights _accessRights, EncryptionMode _encMode,
                                              int _appID, int _fileNo, int _fileSize,
                                              int _minValue = 0, int _maxValue = 1000, int _initValue = 0, bool _isValueLimited = false,

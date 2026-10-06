@@ -87,6 +87,22 @@ namespace RFiDGear.Infrastructure.ReaderProviders
         private static ReaderDevice instance;
 
         public abstract bool IsConnected { get; }
+
+        /// <summary>
+        /// Gets a value indicating whether this provider can send raw command bytes to the card
+        /// (<see cref="TransceiveRawAsync"/>). Defaults to <c>false</c>.
+        /// </summary>
+        public virtual bool SupportsRawTransceive => false;
+
+        /// <summary>
+        /// Sends raw bytes to the currently present card and returns the unprocessed response
+        /// (payload followed by the status word, without throwing on card error statuses).
+        /// Intended for diagnostics. Only available if <see cref="SupportsRawTransceive"/> is <c>true</c>.
+        /// </summary>
+        /// <param name="command">The bytes exactly as they go to the reader (e.g. a complete ISO 7816-4 APDU).</param>
+        /// <returns>The result of the transport and the raw response bytes.</returns>
+        public virtual Task<(ERROR Result, byte[] Response)> TransceiveRawAsync(byte[] command)
+            => Task.FromResult((ERROR.TransportError, Array.Empty<byte>()));
         public static ReaderTypes Reader { get; set; }
         public static int PortNumber { get; set; }
 
