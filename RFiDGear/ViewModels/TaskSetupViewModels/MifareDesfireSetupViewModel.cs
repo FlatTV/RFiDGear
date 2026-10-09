@@ -3654,7 +3654,11 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
 
                     StatusText = string.Format("{0}: {1}\n", DateTime.Now, ResourceLoader.GetResource("textBoxStatusTextBoxDllLoaded"));
 
-                    var appId = AppNumberCurrentAsInt;
+                    // The PICC task has no application section in its UI, so AppNumberCurrent can still
+                    // hold a stale value (e.g. the App ID of a previously created application). It must
+                    // always target the PICC (App 0) there.
+                    var isPiccKeySettingsTask = SelectedTaskType == TaskType_MifareDesfireTask.PICCMasterKeySettingsChangeover;
+                    var appId = ResolveKeySettingsTargetAppId(SelectedTaskType, AppNumberCurrentAsInt);
                     var authKey = appId == 0 ? DesfireMasterKeyCurrent : DesfireAppKeyCurrent;
                     var authKeyType = appId == 0 ? SelectedDesfireMasterKeyEncryptionTypeCurrent : SelectedDesfireAppKeyEncryptionTypeCurrent;
                     var authKeyNumber = 0;
@@ -3671,7 +3675,7 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
                                 authKeyNumber,
                                 appId);
 
-                            if (IsValidAppNumberCurrent != false && IsValidDesfireAppKeyVersionTarget != false && result == ERROR.NoError)
+                            if ((isPiccKeySettingsTask || IsValidAppNumberCurrent != false) && IsValidDesfireAppKeyVersionTarget != false && result == ERROR.NoError)
                             {
                                 StatusText += string.Format("{0}: Successfully Authenticated to AppID {1}\n", DateTime.Now, appId);
                                 await TryUpdateKeyVersionAsync(device, authKeyNumber);
@@ -4126,6 +4130,14 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
         /// Returns the minimal key settings used when changing the PICC master key.
         /// </summary>
         internal static DESFireKeySettings GetPiccMasterKeyChangeSettings() => DESFireKeySettings.ChangeKeyWithMasterKey;
+
+        /// <summary>
+        /// Returns the application whose key settings an "update key settings" operation targets:
+        /// always the PICC (App 0) for the PICC master key settings task, otherwise the configured
+        /// current application.
+        /// </summary>
+        internal static int ResolveKeySettingsTargetAppId(TaskType_MifareDesfireTask taskType, int configuredAppId)
+            => taskType == TaskType_MifareDesfireTask.PICCMasterKeySettingsChangeover ? 0 : configuredAppId;
 
         /// <summary>
         ///

@@ -527,6 +527,21 @@ namespace RFiDGear.Tests
                 Assert.Equal(DESFireKeySettings.ChangeKeyWithMasterKey, settings);
             });
         }
+        [Theory]
+        [InlineData(TaskType_MifareDesfireTask.PICCMasterKeySettingsChangeover, 16084450, 0)]
+        [InlineData(TaskType_MifareDesfireTask.PICCMasterKeySettingsChangeover, 0, 0)]
+        [InlineData(TaskType_MifareDesfireTask.ApplicationKeySettingsChangeover, 16084450, 16084450)]
+        public async Task ResolveKeySettingsTargetAppId_PiccSettingsTaskAlwaysTargetsAppZero(
+            TaskType_MifareDesfireTask taskType,
+            int configuredAppId,
+            int expectedAppId)
+        {
+            await RunOnStaThreadAsync(() =>
+            {
+                Assert.Equal(expectedAppId, MifareDesfireSetupViewModel.ResolveKeySettingsTargetAppId(taskType, configuredAppId));
+            });
+        }
+
         private readonly ITestOutputHelper _output;
         public MifareDesfireSetupViewModelTests(ITestOutputHelper output) => _output = output;
         [Fact]
