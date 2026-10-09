@@ -3904,71 +3904,59 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
 
                     StatusText = string.Format("{0}: {1}\n", DateTime.Now, ResourceLoader.GetResource("textBoxStatusTextBoxDllLoaded"));
 
-                    if (IsValidDesfireKeyValue(DesfireAppKeyCurrent, SelectedDesfireAppKeyEncryptionTypeCurrent))
+                    // Format PICC only needs the PICC master key (application 0, key 0).
+                    // The application key and application number are not part of this task.
+                    if (!IsValidDesfireKeyValue(DesfireMasterKeyCurrent, SelectedDesfireMasterKeyEncryptionTypeCurrent))
                     {
-                        var result = await device.AuthToMifareDesfireApplication(
-                                DesfireMasterKeyCurrent,
-                                SelectedDesfireMasterKeyEncryptionTypeCurrent,
-                                0);
+                        StatusText += string.Format("{0}: Unable to Format Card: invalid PICC master key\n", DateTime.Now);
+                        CurrentTaskErrorLevel = ERROR.ProtocolConstraint;
+                        await UpdateReaderStatusCommand.ExecuteAsync(false);
+                        return;
+                    }
 
-                        if (IsValidAppNumberCurrent != false && result == ERROR.NoError)
+                    var result = await device.AuthToMifareDesfireApplication(
+                            DesfireMasterKeyCurrent,
+                            SelectedDesfireMasterKeyEncryptionTypeCurrent,
+                            0);
+
+                    if (result != ERROR.NoError)
+                    {
+                        StatusText += string.Format("{0}: Unable to Format Card: {1}\n", DateTime.Now, result.ToString());
+                        CurrentTaskErrorLevel = result;
+                        await UpdateReaderStatusCommand.ExecuteAsync(false);
+                        return;
+                    }
+
+                    StatusText += string.Format("{0}: Successfully Authenticated to PICC Master App 0\n", DateTime.Now);
+
+                    result = await device.GetMiFareDESFireChipAppIDs(
+                        DesfireMasterKeyCurrent,
+                        SelectedDesfireMasterKeyEncryptionTypeCurrent);
+
+                    if (result == ERROR.NoError)
+                    {
+                        if (device?.DesfireChip?.AppIDs != null)
                         {
-                            StatusText += string.Format("{0}: Successfully Authenticated to PICC Master App 0\n", DateTime.Now);
-
-                            result = await device.GetMiFareDESFireChipAppIDs(
-                                DesfireMasterKeyCurrent,
-                                SelectedDesfireMasterKeyEncryptionTypeCurrent);
-
-                            if (result == ERROR.NoError)
+                            foreach (var appID in device.DesfireChip.AppIDs)
                             {
-                                if (device?.DesfireChip?.AppIDs != null)
-                                {
-                                    foreach (var appID in device.DesfireChip.AppIDs)
-                                    {
-                                        StatusText += string.Format("{0}: FoundAppID {1}\n", DateTime.Now, appID);
-                                    }
-                                }
-
-                                result = await device.FormatDesfireCard(DesfireMasterKeyCurrent, SelectedDesfireMasterKeyEncryptionTypeCurrent);
-
-                                if (await SetOperationResultAsync(
-                                        result,
-                                        "{0}: Successfully Formatted Card\n",
-                                        new object[] { DateTime.Now },
-                                        "{0}: Unable to Format Card: {1}\n",
-                                        new object[] { DateTime.Now, result.ToString() }))
-                                {
-                                    return;
-                                }
-                                return;
+                                StatusText += string.Format("{0}: FoundAppID {1}\n", DateTime.Now, appID);
                             }
-
-                            else
-                            {
-                                StatusText += string.Format("{0}: Unable to get Directory Listing, Try to Continue anyway...\n", DateTime.Now);
-
-                                result = await device.FormatDesfireCard(DesfireMasterKeyCurrent, SelectedDesfireMasterKeyEncryptionTypeCurrent);
-
-                                if (await SetOperationResultAsync(
-                                        result,
-                                        "{0}: Successfully Formatted Card\n",
-                                        new object[] { DateTime.Now },
-                                        "{0}: Unable to Format Card: {1}\n",
-                                        new object[] { DateTime.Now, result.ToString() }))
-                                {
-                                    return;
-                                }
-                                return;
-                            }
-                        }
-                        else
-                        {
-                            StatusText += string.Format("{0}: Unable to Format Card: {1}\n", DateTime.Now, result.ToString());
-                            CurrentTaskErrorLevel = result;
-                            await UpdateReaderStatusCommand.ExecuteAsync(false);
-                            return;
                         }
                     }
+                    else
+                    {
+                        StatusText += string.Format("{0}: Unable to get Directory Listing, Try to Continue anyway...\n", DateTime.Now);
+                    }
+
+                    result = await device.FormatDesfireCard(DesfireMasterKeyCurrent, SelectedDesfireMasterKeyEncryptionTypeCurrent);
+
+                    await SetOperationResultAsync(
+                        result,
+                        "{0}: Successfully Formatted Card\n",
+                        new object[] { DateTime.Now },
+                        "{0}: Unable to Format Card: {1}\n",
+                        new object[] { DateTime.Now, result.ToString() });
+                    return;
                 }
                 else
                 {
@@ -3977,9 +3965,6 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
                     return;
                 }
             }
-
-            await FinalizeTaskAsync();
-            return;
         }
 
         /// <summary>

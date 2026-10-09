@@ -711,6 +711,72 @@ namespace RFiDGear.Tests
         }
 
         [Fact]
+        public async Task FormatCommand_WithOnlyPiccMasterKey_FormatsWithoutAppKeyOrAppNumber()
+        {
+            await RunOnStaThreadAsync(async () =>
+            {
+                var fakeProvider = new FakeElatecNetProvider();
+                var viewModel = new MifareDesfireSetupViewModel
+                {
+                    SelectedDesfireMasterKeyEncryptionTypeCurrent = DESFireKeyType.DF_KEY_DES,
+                    DesfireMasterKeyCurrent = "00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00"
+                };
+
+                var originalReader = ReaderDevice.Reader;
+                var originalInstance = GetReaderDeviceInstance();
+                try
+                {
+                    ReaderDevice.Reader = ReaderTypes.Elatec;
+                    SetReaderDeviceInstance(fakeProvider);
+
+                    await viewModel.FormatDesfireCardCommand.ExecuteAsync(null);
+
+                    Assert.Equal(1, fakeProvider.FormatCalls);
+                    Assert.Equal(0, fakeProvider.AuthAppId);
+                    Assert.Equal(ERROR.NoError, viewModel.CurrentTaskErrorLevel);
+                }
+                finally
+                {
+                    ReaderDevice.Reader = originalReader;
+                    SetReaderDeviceInstance(originalInstance);
+                }
+            });
+        }
+
+        [Fact]
+        public async Task FormatCommand_WithInvalidPiccMasterKey_ReportsErrorAndDoesNotFormat()
+        {
+            await RunOnStaThreadAsync(async () =>
+            {
+                var fakeProvider = new FakeElatecNetProvider();
+                var viewModel = new MifareDesfireSetupViewModel
+                {
+                    SelectedDesfireMasterKeyEncryptionTypeCurrent = DESFireKeyType.DF_KEY_DES,
+                    DesfireMasterKeyCurrent = "00 00"
+                };
+
+                var originalReader = ReaderDevice.Reader;
+                var originalInstance = GetReaderDeviceInstance();
+                try
+                {
+                    ReaderDevice.Reader = ReaderTypes.Elatec;
+                    SetReaderDeviceInstance(fakeProvider);
+
+                    await viewModel.FormatDesfireCardCommand.ExecuteAsync(null);
+
+                    Assert.Equal(0, fakeProvider.FormatCalls);
+                    Assert.Equal(0, fakeProvider.AuthCalls);
+                    Assert.NotEqual(ERROR.NoError, viewModel.CurrentTaskErrorLevel);
+                }
+                finally
+                {
+                    ReaderDevice.Reader = originalReader;
+                    SetReaderDeviceInstance(originalInstance);
+                }
+            });
+        }
+
+        [Fact]
         public async Task CreateFileCommand_WithoutAuthentication_PassesAuthMethodAndSkipsKeyValidation()
         {
             await RunOnStaThreadAsync(async () =>
@@ -856,12 +922,26 @@ namespace RFiDGear.Tests
             public int LastWriteKeyNumber { get; private set; }
             public string LastCreateFileKey { get; private set; }
             public int CreateFileCalls { get; private set; }
+            public int FormatCalls { get; private set; }
+            public int AuthCalls { get; private set; }
+            public int AuthAppId { get; private set; } = -1;
             public DesfireFileAuthMethod LastCreateFileAuthMethod { get; private set; }
             public string LastCreateApplicationKey { get; private set; }
             public int CreateApplicationCalls { get; private set; }
 
+            public override Task<ERROR> GetMiFareDESFireChipAppIDs(string _appMasterKey = "00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00", DESFireKeyType _keyTypeAppMasterKey = DESFireKeyType.DF_KEY_DES)
+                => Task.FromResult(ERROR.NoError);
+
+            public override Task<ERROR> FormatDesfireCard(string _applicationMasterKey, DESFireKeyType _keyType)
+            {
+                FormatCalls++;
+                return Task.FromResult(ERROR.NoError);
+            }
+
             public override Task<ERROR> AuthToMifareDesfireApplication(string _applicationMasterKey, DESFireKeyType _keyType, int _keyNumber, int _appID = 0)
             {
+                AuthCalls++;
+                AuthAppId = _appID;
                 LastAuthKey = _applicationMasterKey;
                 LastAuthKeyType = _keyType;
                 LastAuthKeyNumber = _keyNumber;
