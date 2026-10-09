@@ -211,6 +211,7 @@ namespace RFiDGear.ViewModel
 
             ChipTasks = new ChipTaskHandlerModel();
             AttachProjectDirtyTracking();
+            ChipTasks.PropertyChanged += OnChipTasksPropertyChangedForDirtyTracking;
 
             ReaderStatus = "";
             DateTimeStatusBar = "";
@@ -512,16 +513,70 @@ namespace RFiDGear.ViewModel
             }
         }
 
+        private System.Collections.ObjectModel.ObservableCollection<object> trackedTaskCollection;
+
         /// <summary>
-        /// Subscribes to <see cref="ChipTaskHandlerModel.TaskCollection"/> so that adding,
-        /// removing, or reordering tasks - or editing a property on any task already in the
-        /// collection - marks the project dirty. Called once, right after ChipTasks is
-        /// constructed; project loads reuse the same collection instance (Clear()+Add()),
-        /// they don't replace it, so a single subscription covers the whole session.
+        /// Subscribes to the current <see cref="ChipTaskHandlerModel.TaskCollection"/> instance so
+        /// that adding, removing, or reordering tasks - or editing a property on any task already
+        /// in the collection - marks the project dirty. The collection instance is replaced
+        /// whenever tasks are re-sorted after being created/edited (and by
+        /// <c>ReplaceTaskCollection</c>), so this is re-run via
+        /// <see cref="OnChipTasksPropertyChangedForDirtyTracking"/> on every replacement: the
+        /// previously tracked instance and its items are detached first, so no handler is
+        /// registered twice and none is left on an orphaned collection.
         /// </summary>
         private void AttachProjectDirtyTracking()
         {
-            ChipTasks.TaskCollection.CollectionChanged += OnTaskCollectionChangedForDirtyTracking;
+            DetachProjectDirtyTracking();
+
+            trackedTaskCollection = ChipTasks?.TaskCollection;
+            if (trackedTaskCollection == null)
+            {
+                return;
+            }
+
+            trackedTaskCollection.CollectionChanged += OnTaskCollectionChangedForDirtyTracking;
+
+            foreach (var item in trackedTaskCollection.OfType<INotifyPropertyChanged>())
+            {
+                item.PropertyChanged -= OnTaskItemPropertyChangedForDirtyTracking;
+                item.PropertyChanged += OnTaskItemPropertyChangedForDirtyTracking;
+            }
+        }
+
+        private void DetachProjectDirtyTracking()
+        {
+            if (trackedTaskCollection == null)
+            {
+                return;
+            }
+
+            trackedTaskCollection.CollectionChanged -= OnTaskCollectionChangedForDirtyTracking;
+
+            foreach (var item in trackedTaskCollection.OfType<INotifyPropertyChanged>())
+            {
+                item.PropertyChanged -= OnTaskItemPropertyChangedForDirtyTracking;
+            }
+
+            trackedTaskCollection = null;
+        }
+
+        /// <summary>
+        /// Reacts to <see cref="ChipTaskHandlerModel.TaskCollection"/> being assigned a new
+        /// instance (re-sorting after add/edit, extension host replacing the tasks): re-attaches
+        /// the dirty tracking to the new instance and treats the replacement as a change.
+        /// Project loads reuse the existing instance (Clear()+Add()), and
+        /// <see cref="SetCurrentProject"/> clears the flag again once a load has completed.
+        /// </summary>
+        private void OnChipTasksPropertyChangedForDirtyTracking(object sender, PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName != nameof(ChipTaskHandlerModel.TaskCollection))
+            {
+                return;
+            }
+
+            AttachProjectDirtyTracking();
+            MarkProjectDirty();
         }
 
         private void OnTaskCollectionChangedForDirtyTracking(object sender, NotifyCollectionChangedEventArgs e)
@@ -540,6 +595,7 @@ namespace RFiDGear.ViewModel
             {
                 foreach (var item in e.NewItems.OfType<INotifyPropertyChanged>())
                 {
+                    item.PropertyChanged -= OnTaskItemPropertyChangedForDirtyTracking;
                     item.PropertyChanged += OnTaskItemPropertyChangedForDirtyTracking;
                 }
             }
