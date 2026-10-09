@@ -4042,8 +4042,13 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
                     {
                         var keySettings = GetPiccMasterKeyChangeSettings();
 
+                        // Authenticate with the configured current PICC master key itself. Do NOT use
+                        // CustomConverter.DesfireKeyToCheck here: it is a shared static that merely holds
+                        // whichever key was validated last (e.g. the target key, or a key from another task
+                        // run before this one), so a task started without a preceding manual
+                        // "authenticate" click used a stale key and failed with AuthFailure.
                         var result = await device.AuthToMifareDesfireApplication(
-                            CustomConverter.DesfireKeyToCheck,
+                            DesfireMasterKeyCurrent,
                             SelectedDesfireMasterKeyEncryptionTypeCurrent,
                             0);
 
