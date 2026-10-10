@@ -601,9 +601,46 @@ namespace RFiDGear.ViewModel
             }
         }
 
+        /// <summary>
+        /// Task status that only reflects the outcome of running a task. It is never part of what the
+        /// user edits, so it must not make the project look modified (e.g. after a "format card" task).
+        /// </summary>
+        private static readonly HashSet<string> runtimeOnlyTaskProperties = new HashSet<string>
+        {
+            nameof(IGenericTask.IsTaskCompletedSuccessfully),
+            nameof(IGenericTask.CurrentTaskErrorLevel),
+            "ExecutionState"
+        };
+
         private void OnTaskItemPropertyChangedForDirtyTracking(object sender, PropertyChangedEventArgs e)
         {
+            if (IsRuntimeOnlyTaskProperty(sender, e.PropertyName))
+            {
+                return;
+            }
+
             MarkProjectDirty();
+        }
+
+        /// <summary>
+        /// True for properties that are not persisted with the project: the known execution status
+        /// properties and anything marked <see cref="System.Xml.Serialization.XmlIgnoreAttribute"/>.
+        /// An empty property name (= "everything changed") is treated as a real change.
+        /// </summary>
+        private static bool IsRuntimeOnlyTaskProperty(object sender, string propertyName)
+        {
+            if (string.IsNullOrEmpty(propertyName))
+            {
+                return false;
+            }
+
+            if (runtimeOnlyTaskProperties.Contains(propertyName))
+            {
+                return true;
+            }
+
+            var property = sender?.GetType().GetProperty(propertyName);
+            return property != null && property.IsDefined(typeof(System.Xml.Serialization.XmlIgnoreAttribute), true);
         }
 
         /// <summary>
