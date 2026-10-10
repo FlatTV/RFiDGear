@@ -1623,6 +1623,12 @@ namespace RFiDGear.ViewModel
 
                 if (dlg.Show(Dialogs) && dlg.FileName != null)
                 {
+                    // Ask before the current project is replaced; "Cancel" keeps it untouched.
+                    if (!await ConfirmCloseWithUnsavedChangesAsync())
+                    {
+                        return;
+                    }
+
                     Mouse.OverrideCursor = Cursors.AppStarting;
 
                     if (ChipTasks.TaskCollection != null && ChipTasks.TaskCollection.Count > 0)
