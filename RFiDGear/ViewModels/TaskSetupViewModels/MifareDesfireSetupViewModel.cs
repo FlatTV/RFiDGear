@@ -4349,9 +4349,7 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
                         {
                             var actual = (byte)device.DesfireAppKeySetting;
                             var expected = (byte)keySettings;
-                            bool passes = IsAppSettingsExactMatch
-                                ? actual == expected
-                                : (actual & expected) == expected;
+                            bool passes = CompareAppKeySettings(actual, expected);
 
                             StatusText += string.Format("{0}: App {1} settings read — actual: 0x{2:X2}, expected: 0x{3:X2} ({4}) → {5}\n",
                                 DateTime.Now,

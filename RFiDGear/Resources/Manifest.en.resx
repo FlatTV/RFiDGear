@@ -1867,4 +1867,7 @@ https://github.com/c3rebro/RFiDGear</value>
   <data name="buttonContentValidateFile" xml:space="preserve">
     <value>Check file and keys</value>
   </data>
+  <data name="checkBoxCheckChangeKeyCondition" xml:space="preserve">
+    <value>Also check change-key condition</value>
+  </data>
 </root>
