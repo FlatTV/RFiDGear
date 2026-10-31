@@ -1861,4 +1861,10 @@ https://github.com/c3rebro/RFiDGear</value>
   <data name="menuItemReadAppWithKey" xml:space="preserve">
     <value>Read App with Key…</value>
   </data>
+  <data name="ENUM.TaskType_MifareDesfireTask.ValidateFile" xml:space="preserve">
+    <value>Check: File and Keys</value>
+  </data>
+  <data name="buttonContentValidateFile" xml:space="preserve">
+    <value>Check file and keys</value>
+  </data>
 </root>

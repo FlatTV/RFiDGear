@@ -40,7 +40,7 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
     /// <summary>
     /// Description of MifareDesfireSetupViewModel.
     /// </summary>
-    public class MifareDesfireSetupViewModel : ObservableObject, IUserDialogViewModel, IGenericTask
+    public partial class MifareDesfireSetupViewModel : ObservableObject, IUserDialogViewModel, IGenericTask
     {
         #region Fields
         private readonly object editedTaskReference; // Tracks the original task instance during edit mode.
@@ -829,6 +829,10 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
                         SetTabAvailability(false, false, false, false, true, true, true);
                         break;
 
+                    case TaskType_MifareDesfireTask.ValidateFile:
+                        SetTabAvailability(true, false, false, false, true, true, false);
+                        break;
+
                     case TaskType_MifareDesfireTask.ApplicationKeyChangeover:
                         SetTabAvailability(false, false, false, false, true, true, false);
                         break;
@@ -906,6 +910,7 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
                 OnPropertyChanged(nameof(ShowFileAccessRights));
                 OnPropertyChanged(nameof(ShowFileAuthoringCommands));
                 OnPropertyChanged(nameof(ShowChangeFileSettingsButton));
+                OnPropertyChanged(nameof(ShowValidateFileButton));
                 OnPropertyChanged(nameof(ShowFileAuthMethodInput));
 
                 UpdateOldAppKeyDefaults();
@@ -940,7 +945,8 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
                                                && SelectedTaskType != TaskType_MifareDesfireTask.ReadData
                                                && SelectedTaskType != TaskType_MifareDesfireTask.WriteData
                                                && SelectedTaskType != TaskType_MifareDesfireTask.ChangeFileSettings
-                                               && SelectedTaskType != TaskType_MifareDesfireTask.DeleteApplication;
+                                               && SelectedTaskType != TaskType_MifareDesfireTask.DeleteApplication
+                                               && SelectedTaskType != TaskType_MifareDesfireTask.ValidateFile;
 
         /// <summary>
         /// Gets a value indicating whether UI elements for supplying the current application key should be shown.
@@ -1060,7 +1066,8 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
         [XmlIgnore]
         public bool ShowFileAuthoringCommands => SelectedTaskType != TaskType_MifareDesfireTask.ReadData
                                                  && SelectedTaskType != TaskType_MifareDesfireTask.WriteData
-                                                 && SelectedTaskType != TaskType_MifareDesfireTask.ChangeFileSettings;
+                                                 && SelectedTaskType != TaskType_MifareDesfireTask.ChangeFileSettings
+                                                 && SelectedTaskType != TaskType_MifareDesfireTask.ValidateFile;
 
         /// <summary>
         /// Gets a value indicating whether the Change File Settings button should be shown.
@@ -2556,6 +2563,10 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
                 {
                     case TaskType_MifareDesfireTask.AppExistCheck:
                         await DoesAppExistCommand(new MifareDesfireChipModel());
+                        break;
+
+                    case TaskType_MifareDesfireTask.ValidateFile:
+                        await ValidateFileCommand();
                         break;
 
                     case TaskType_MifareDesfireTask.ApplicationKeyChangeover:
