@@ -992,9 +992,12 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
         /// <summary>
         /// Gets a value indicating whether UI elements for configuring PICC master key settings should be shown.
         /// Settings controls are unnecessary when only changing the PICC master key material.
+        /// Also shown for <see cref="TaskType_MifareDesfireTask.ReadAppSettings"/>, where the checkboxes
+        /// (and the check-mode radio buttons inside the same group box) hold the EXPECTED key settings.
         /// </summary>
         [XmlIgnore]
-        public bool ShowPiccMasterKeySettingsInputs => SelectedTaskType == TaskType_MifareDesfireTask.PICCMasterKeySettingsChangeover;
+        public bool ShowPiccMasterKeySettingsInputs => SelectedTaskType == TaskType_MifareDesfireTask.PICCMasterKeySettingsChangeover
+                                                       || SelectedTaskType == TaskType_MifareDesfireTask.ReadAppSettings;
 
         /// <summary>
         /// Gets a value indicating whether the check-mode radio buttons should be shown.
