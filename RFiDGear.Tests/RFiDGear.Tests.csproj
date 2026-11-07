@@ -13,9 +13,34 @@
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.0.1" />
     <PackageReference Include="xunit" Version="2.8.1" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.8.1" />
+    <!-- A real SQL engine for the order store's tests only; it is not shipped and the library does not use it. -->
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.4" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Remove="Fixtures\**" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\RFiDGear.Extensions\DesfirePluginSample\RFiDGear.Extensions.DesfirePluginSample.csproj" />
+    <ProjectReference Include="..\RFiDGear.Extensions\CardCheckAssistant\RFiDGear.Extensions.CardCheckAssistant.csproj" />
     <ProjectReference Include="..\\RFiDGear\\RFiDGear.csproj" />
+    <ProjectReference Include="..\RFiDGear.ExtensionSdk\RFiDGear.ExtensionSdk.csproj" />
+    <ProjectReference Include="..\RFiDGear.ExtensionLibraries\CardCheck\RFiDGear.ExtensionLibraries.CardCheck.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="Fixtures\minimal.rfPrj">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <!-- Extension binaries built before the SDK split; loaded by LegacyExtensionCompatibilityTests, never compiled in. -->
+    <Content Include="Fixtures\LegacyExtensions\*.dll">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <!-- The approved public surface of RFiDGear.Contracts, compared by ApiSurface/ContractsApiSurfaceTests. -->
+    <Content Include="ApiSurface\RFiDGear.Contracts.api.approved">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <!-- The approved public surface of RFiDGear.ExtensionSdk, compared by ApiSurface/ExtensionSdkApiSurfaceTests. -->
+    <Content Include="ApiSurface\RFiDGear.ExtensionSdk.api.approved">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
 </Project>

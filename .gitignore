@@ -27,6 +27,11 @@
 /RFiDGear.DesfirePluginSample/obj
 /RFiDGear.Extensions/DesfirePluginSample/obj
 /RFiDGear.Extensions/DesfirePluginSample/bin
+/RFiDGear.Extensions/CardCheckAssistant/obj
+/RFiDGear.Extensions/CardCheckAssistant/bin
+/RFiDGear.Extensions/deploy.local.props
+/RFiDGear.ExtensionLibraries/CardCheck/obj
+/RFiDGear.ExtensionLibraries/CardCheck/bin
 /RFiDGearBundleSetup/RFiDGearBundleSetup.wixproj
 /RFiDGearSetup/RFiDGear_Setup_x64/bin
 /RFiDGearSetup/RFiDGear_Setup_x86/bin
@@ -37,7 +42,12 @@
 /RFiDGear.Extensions/VCNEditor/RFiDGear.Extensions.VCNEditor.csproj
 /.claude
 RFiDGear/.claude/settings.local.json
+/website
+/docs/plans
 /RFiDGear.Contracts/bin
 /RFiDGear.Contracts/obj
 /RFiDGear.HIL.Tests/bin
 /RFiDGear.HIL.Tests/obj
+/RFiDGear.Tests/TestResults
+/RFiDGear.ExtensionSdk/bin
+/RFiDGear.ExtensionSdk/obj

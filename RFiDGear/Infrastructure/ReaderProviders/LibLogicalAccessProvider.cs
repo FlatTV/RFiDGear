@@ -1783,7 +1783,7 @@ namespace RFiDGear.Infrastructure.ReaderProviders
             byte newTargetKeyVersion,   // not used by LibLogicalAccess changeKey; kept for API symmetry
             string masterKeyHex,
             DESFireKeyType masterKeyType,
-            AccessControl.DESFireKeySettings keySettings)
+            AccessControl.DESFireKeySettings currentKeySettings)
         {
             try
             {
@@ -1796,7 +1796,7 @@ namespace RFiDGear.Infrastructure.ReaderProviders
                     newTargetKeyVersion,
                     masterKeyHex,
                     masterKeyType,
-                    keySettings);
+                    currentKeySettings);
 
                 // Build authentication key (either master key or target key depending on policy).
                 //
@@ -2061,9 +2061,9 @@ namespace RFiDGear.Infrastructure.ReaderProviders
                             if (deleteIssued && appPresentBeforeDelete && IsDesfireApplicationListed(cmd, _appID) == false)
                                 return ERROR.NoError;
 
-                            if (e.Message != "" && e.Message.Contains("status does not allow the requested command"))
+                            if (e.Message != null && e.Message.Contains("status does not allow the requested command"))
                                 return ERROR.AuthFailure;
-                            return ERROR.AuthFailure;
+                            return ERROR.TransportError;
                         }
                     }
                     return ERROR.TransportError;

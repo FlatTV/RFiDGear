@@ -84,6 +84,7 @@ namespace RFiDGear.ViewModel
         private ITaskExecutionService taskExecutionService;
         private readonly ISettingsBootstrapper settingsBootstrapper;
         private readonly Func<SettingsReaderWriter> settingsReaderWriterFactory;
+        private readonly Func<DatabaseReaderWriter> databaseReaderWriterFactory;
         private readonly IUpdateNotifier updateNotifier;
         private readonly IContextMenuBuilder contextMenuBuilder;
         private readonly IStartupArgumentProcessor startupArgumentProcessor;
@@ -95,6 +96,8 @@ namespace RFiDGear.ViewModel
         private readonly IMenuInitializer menuInitializer;
 
         private HeadlessExtensionHost extensionHost;
+        private ExtensionOperationCoordinator _coordinator;
+        private readonly IApplicationExtensionLauncher applicationExtensionLauncher;
 
         private protected MainWindow mw;
         private protected DatabaseReaderWriter databaseReaderWriter;
@@ -146,7 +149,9 @@ namespace RFiDGear.ViewModel
             IUpdateScheduler updateScheduler,
             IReaderMonitor readerMonitor,
             IProjectBootstrapper projectBootstrapper,
-            Func<SettingsReaderWriter> settingsReaderWriterFactory = null)
+            Func<SettingsReaderWriter> settingsReaderWriterFactory = null,
+            Func<DatabaseReaderWriter> databaseReaderWriterFactory = null,
+            IApplicationExtensionLauncher applicationExtensionLauncher = null)
         {
             this.settingsBootstrapper = settingsBootstrapper ?? throw new ArgumentNullException(nameof(settingsBootstrapper));
             this.updateNotifier = updateNotifier ?? throw new ArgumentNullException(nameof(updateNotifier));
@@ -159,6 +164,8 @@ namespace RFiDGear.ViewModel
             this.readerMonitor = readerMonitor ?? throw new ArgumentNullException(nameof(readerMonitor));
             this.projectBootstrapper = projectBootstrapper ?? throw new ArgumentNullException(nameof(projectBootstrapper));
             this.settingsReaderWriterFactory = settingsReaderWriterFactory ?? (() => new SettingsReaderWriter());
+            this.databaseReaderWriterFactory = databaseReaderWriterFactory ?? (() => new DatabaseReaderWriter());
+            this.applicationExtensionLauncher = applicationExtensionLauncher ?? new ApplicationExtensionLauncher(ShowExtensionError);
 
             if (appStartupInitializer == null)
             {
@@ -215,7 +222,7 @@ namespace RFiDGear.ViewModel
 
             ReaderStatus = "";
             DateTimeStatusBar = "";
-            databaseReaderWriter = new DatabaseReaderWriter();
+            databaseReaderWriter = databaseReaderWriterFactory();
             resLoader = new ResourceLoader();
 
             var taskServices = taskServiceInitializer.Initialize(
@@ -229,12 +236,37 @@ namespace RFiDGear.ViewModel
             taskDialogFactory = taskServices.TaskDialogFactory;
             taskExecutionService = taskServices.TaskExecutionService;
 
+            _coordinator = new ExtensionOperationCoordinator();
+            var owningDispatcher = Dispatcher.CurrentDispatcher;
             extensionHost = new HeadlessExtensionHost(
                 databaseReaderWriter,
                 taskExecutionService,
-                () => taskHandler,
-                () => OnPropertyChanged(nameof(ChipTasks)),
-                string.Empty);
+                liveModelAccessor: () => taskHandler,
+                dispatch: action => owningDispatcher.InvokeAsync(action).Task,
+                applyToLiveApp: loadedModel =>
+                {
+                    // Runs on the WPF dispatcher thread — safe to mutate bound collections.
+                    // TreeViewParentNodes is deliberately left alone: it shows the cards detected by
+                    // the reader, which are not part of a project, and must survive opening one.
+                    if (taskHandler.TaskCollection != null)
+                        taskHandler.TaskCollection.Clear();
+                    else
+                        taskHandler.TaskCollection = new System.Collections.ObjectModel.ObservableCollection<object>();
+
+                    foreach (var task in loadedModel?.TaskCollection ?? System.Linq.Enumerable.Empty<object>())
+                        taskHandler.TaskCollection.Add(task);
+
+                    OnPropertyChanged(nameof(ChipTasks));
+                },
+                readerName: string.Empty,
+                coordinator: _coordinator,
+                getConfiguredLanguage: () => culture?.Name == "de-DE" ? "german" : "english",
+                isOnUiThread: () => owningDispatcher.CheckAccess(),
+                getReaderName: () => CurrentReader);
+
+            // The Extensions menu entries were built when MEF composed this view model, before the host existed, and
+            // stay disabled until now.
+            NotifyApplicationExtensionCommandsCanExecuteChanged();
 
             var deleteSelectedCommand = new RelayCommand(() =>
             {
@@ -291,10 +323,14 @@ namespace RFiDGear.ViewModel
         #region Extension host
 
         /// <summary>
-        /// Stable host service importable by MEF extensions. Provides project, execution,
-        /// reader, and auto-mode access without requiring a direct reference to this view model.
+        /// Stable host service for extensions. Provides project, execution, reader, and auto-mode access without
+        /// requiring a direct reference to this view model. It is <c>null</c> until start-up has built it.
         /// </summary>
-        [Export(typeof(IRFiDGearExtensionHost))]
+        /// <remarks>
+        /// Deliberately not a MEF export: it did not exist yet when MEF composed the extensions, so an import was
+        /// empty. Application extensions receive it as the argument of
+        /// <c>IApplicationUIExtension.CreateContent</c> when the user opens them.
+        /// </remarks>
         public IRFiDGearExtensionHost ExtensionHost => extensionHost;
 
         #endregion Extension host
@@ -318,13 +354,14 @@ namespace RFiDGear.ViewModel
                                               select g).ToArray();
 
                 _applicationExtensionMenuItems.Clear();
+                _applicationExtensionCommands.Clear();
                 foreach (var ext in _applicationExtensionItems)
                 {
-                    var uri = ext.Metadata.Uri;
-                    var name = ext.Metadata.Name;
-                    _applicationExtensionMenuItems.Add(new ExtensionMenuItem(
-                        name,
-                        new RelayCommand(() => OpenApplicationExtension(uri, name))));
+                    // Only the metadata is read here. The exported class is created when the user opens the entry.
+                    var extension = ext;
+                    var command = new RelayCommand(() => OpenApplicationExtension(extension), () => extensionHost != null);
+                    _applicationExtensionCommands.Add(command);
+                    _applicationExtensionMenuItems.Add(new ExtensionMenuItem(ext.Metadata.Name, command));
                 }
 
                 OnPropertyChanged(nameof(ApplicationExtensionItems));
@@ -334,6 +371,7 @@ namespace RFiDGear.ViewModel
         private Lazy<IUIExtension, IUIExtensionDetails>[] _applicationExtensionItems = Array.Empty<Lazy<IUIExtension, IUIExtensionDetails>>();
 
         private readonly ObservableCollection<ExtensionMenuItem> _applicationExtensionMenuItems = new ObservableCollection<ExtensionMenuItem>();
+        private readonly List<RelayCommand> _applicationExtensionCommands = new List<RelayCommand>();
 
         /// <summary>
         /// Menu items for application-level extensions; bound to the Extensions menu in the main window.
@@ -345,21 +383,60 @@ namespace RFiDGear.ViewModel
         /// </summary>
         public bool HasApplicationExtensions => _applicationExtensionMenuItems.Count > 0;
 
-        private static void OpenApplicationExtension(string uri, string title)
+        /// <summary>
+        /// Opens one application extension. The menu entry is disabled until the host service exists, but a command
+        /// can still be executed directly, so this checks it too: an extension must never be handed a missing host.
+        /// </summary>
+        private void OpenApplicationExtension(Lazy<IUIExtension, IUIExtensionDetails> extension)
         {
-            var frame = new System.Windows.Controls.Frame
+            var host = extensionHost;
+            if (host == null)
             {
-                NavigationUIVisibility = System.Windows.Navigation.NavigationUIVisibility.Hidden
-            };
-            var window = new Window
+                Log.ForContext<MainWindowViewModel>().Warning(
+                    "Application extension {ExtensionName} was opened before the host service was ready",
+                    extension.Metadata.Name);
+                ShowExtensionError(extension.Metadata.Name);
+                return;
+            }
+
+            applicationExtensionLauncher.Open(extension, host);
+        }
+
+        /// <summary>
+        /// Re-evaluates whether the Extensions menu entries can be used. Called once the host service exists.
+        /// </summary>
+        private void NotifyApplicationExtensionCommandsCanExecuteChanged()
+        {
+            foreach (var command in _applicationExtensionCommands)
             {
-                Title = title ?? string.Empty,
-                Width = 900,
-                Height = 600,
-                Content = frame
-            };
-            frame.Source = new Uri(uri);
-            window.Show();
+                command.NotifyCanExecuteChanged();
+            }
+        }
+
+        /// <summary>Resource key of the caption of the "extension could not be opened" dialog.</summary>
+        internal const string ExtensionOpenFailedCaptionKey = "messageBoxExtensionOpenFailedCaption";
+
+        /// <summary>Resource key of the message of that dialog; its <c>{0}</c> is the extension's name.</summary>
+        internal const string ExtensionOpenFailedMessageKey = "messageBoxExtensionOpenFailedMessage";
+
+        /// <summary>
+        /// Tells the user that an application extension could not be opened. The details are in the log.
+        /// </summary>
+        /// <param name="extensionName">The extension's display name.</param>
+        private void ShowExtensionError(string extensionName)
+        {
+            const string fallbackMessage = "The extension '{0}' could not be opened. Details are in the application log.";
+
+            var template = ResourceLoader.GetResource(ExtensionOpenFailedMessageKey);
+            Dialogs.Add(new CustomDialogViewModel
+            {
+                Caption = ResourceLoader.GetResource(ExtensionOpenFailedCaptionKey),
+                Message = string.Format(
+                    CultureInfo.CurrentCulture,
+                    string.IsNullOrWhiteSpace(template) ? fallbackMessage : template,
+                    extensionName),
+                OnOk = sender => sender.Close()
+            });
         }
 
         /// <summary>
@@ -384,6 +461,18 @@ namespace RFiDGear.ViewModel
         #region Localization
         [ExportViewModel("Culture")]
         private protected CultureInfo culture;
+
+        /// <summary>
+        /// Records the language the application now works with and lets extensions know if it differs from before
+        /// (<c>IAppContext.CultureChanged</c>). Runs on the thread that changes the language, normally the UI thread.
+        /// Before start-up has built the extension host there is nobody to tell, so the language is just stored.
+        /// </summary>
+        /// <param name="value">The culture that matches the language read from the settings.</param>
+        private void ApplyCulture(CultureInfo value)
+        {
+            culture = value;
+            extensionHost?.NotifyCultureMayHaveChanged();
+        }
 
         private protected ResourceLoader resLoader;
 
@@ -702,47 +791,31 @@ namespace RFiDGear.ViewModel
         {
             using (var settings = settingsReaderWriterFactory())
             {
-                var autoLoadLastUsedDB = settings.DefaultSpecification.AutoLoadProjectOnStart;
-                string lastUsedDBPath;
+                var projectPath = string.IsNullOrEmpty(projectFileToUse)
+                    ? settings.DefaultSpecification.LastUsedProjectPath
+                    : projectFileToUse;
 
-                if (string.IsNullOrEmpty(projectFileToUse))
+                ApplyCulture((settings.DefaultSpecification.DefaultLanguage == "german") ? new CultureInfo("de-DE") : new CultureInfo("en-US"));
+
+                var result = await extensionHost.Project.LoadAsync(projectPath);
+                if (!result.Success)
                 {
-                    lastUsedDBPath = settings.DefaultSpecification.LastUsedProjectPath;
+                    LogProjectOpenFailure(projectPath, result.Error);
+                    if (Dialogs.Any())
+                        Dialogs.RemoveAt(0);
+                    return;
                 }
-                else
+
+                if (!string.IsNullOrEmpty(projectFileToUse))
                 {
-                    lastUsedDBPath = projectFileToUse;
-                    settings.DefaultSpecification.LastUsedProjectPath = projectFileToUse;
+                    settings.DefaultSpecification.LastUsedProjectPath = result.CanonicalPath;
                     await settings.SaveSettings();
                 }
 
-                culture = (settings.DefaultSpecification.DefaultLanguage == "german") ? new CultureInfo("de-DE") : new CultureInfo("en-US");
-
-                if (ChipTasks.TaskCollection != null && ChipTasks.TaskCollection.Count > 0)
-                {
-                    ChipTasks.TaskCollection.Clear();
-                }
-
-                await databaseReaderWriter.ReadDatabase(lastUsedDBPath);
-
-                foreach (var vm in databaseReaderWriter.TreeViewModel)
-                {
-                    TreeViewParentNodes.Add(vm);
-                }
-
-
-                foreach (var setup in databaseReaderWriter.SetupModel.TaskCollection)
-                {
-                    ChipTasks.TaskCollection.Add(setup);
-                }
+                SetCurrentProject(result.CanonicalPath);
 
                 if (Dialogs.Any())
-                {
                     Dialogs.RemoveAt(0);
-                }
-
-                SetCurrentProject(lastUsedDBPath);
-                OnPropertyChanged(nameof(ChipTasks));
             }
         }
         #endregion
@@ -1394,36 +1467,40 @@ namespace RFiDGear.ViewModel
         public IAsyncRelayCommand WriteToChipOnceCommand => new AsyncRelayCommand(OnNewWriteToChipOnceCommand);
         private async Task OnNewWriteToChipOnceCommand()
         {
-            Mouse.OverrideCursor = Cursors.AppStarting;
-
-            if (!_runSelectedOnly)
+            if (!_coordinator.TryBeginExecution())
             {
-                await OnNewResetTaskStatusCommand();
+                Mouse.OverrideCursor = null;
+                return;
             }
-
-            await OnNewReadChipCommand();
-            OnPropertyChanged(nameof(TreeViewParentNodes));
-            OnPropertyChanged(nameof(ChipTasks));
-
-            var request = new TaskExecutionRequest
-            {
-                TaskHandler = taskHandler,
-                TreeViewParentNodes = treeViewParentNodes,
-                VariablesFromArgs = variablesFromArgs,
-                Dialogs = Dialogs,
-                ReportReaderWriter = reportReaderWriter,
-                ReportOutputPath = reportOutputPath,
-                ReportTemplateFile = reportTemplateFile,
-                SelectedSetupViewModel = SelectedSetupViewModel,
-                RunSelectedOnly = _runSelectedOnly,
-                UpdateSelectedSetupViewModel = vm => SelectedSetupViewModel = vm,
-                UpdateReaderBusy = status => IsReaderBusy = status,
-                NotifyTreeViewChanged = () => OnPropertyChanged(nameof(TreeViewParentNodes)),
-                NotifyTasksChanged = () => OnPropertyChanged(nameof(ChipTasks)),
-            };
 
             try
             {
+                Mouse.OverrideCursor = Cursors.AppStarting;
+
+                if (!_runSelectedOnly)
+                    await OnNewResetTaskStatusCommand();
+
+                await OnNewReadChipCommand();
+                OnPropertyChanged(nameof(TreeViewParentNodes));
+                OnPropertyChanged(nameof(ChipTasks));
+
+                var request = new TaskExecutionRequest
+                {
+                    TaskHandler = taskHandler,
+                    TreeViewParentNodes = treeViewParentNodes,
+                    VariablesFromArgs = variablesFromArgs,
+                    Dialogs = Dialogs,
+                    ReportReaderWriter = reportReaderWriter,
+                    ReportOutputPath = reportOutputPath,
+                    ReportTemplateFile = reportTemplateFile,
+                    SelectedSetupViewModel = SelectedSetupViewModel,
+                    RunSelectedOnly = _runSelectedOnly,
+                    UpdateSelectedSetupViewModel = vm => SelectedSetupViewModel = vm,
+                    UpdateReaderBusy = status => IsReaderBusy = status,
+                    NotifyTreeViewChanged = () => OnPropertyChanged(nameof(TreeViewParentNodes)),
+                    NotifyTasksChanged = () => OnPropertyChanged(nameof(ChipTasks)),
+                };
+
                 var result = await taskExecutionService.ExecuteOnceAsync(request, CancellationToken.None);
 
                 reportReaderWriter = result.ReportReaderWriter;
@@ -1444,6 +1521,7 @@ namespace RFiDGear.ViewModel
             }
             finally
             {
+                _coordinator.EndExecution();
                 Mouse.OverrideCursor = null;
             }
         }
@@ -1579,11 +1657,13 @@ namespace RFiDGear.ViewModel
 
                         sender.SaveSettings.ExecuteAsync(null);
 
+                        // Switch the provider first: setting the name announces the change to extensions, and they read
+                        // the connection and card state of whichever provider is current when that happens.
+                        ReaderDevice.Reader = sender.SelectedReader;
+
                         CurrentReader = string.IsNullOrWhiteSpace(sender.SelectedReaderName)
                             ? Enum.GetName(typeof(ReaderTypes), sender.SelectedReader)
                             : sender.SelectedReaderName;
-
-                        ReaderDevice.Reader = sender.SelectedReader;
 
                         sender.Close();
 
@@ -1635,19 +1715,13 @@ namespace RFiDGear.ViewModel
         public IAsyncRelayCommand NewOpenFileDialogCommand => new AsyncRelayCommand(OnNewOpenFileDialog);
         private async Task OnNewOpenFileDialog()
         {
-            bool autoLoadLastUsedDB;
-            string lastUsedDBPath;
-
             using (var settings = settingsReaderWriterFactory())
             {
                 CurrentReader = string.IsNullOrWhiteSpace(settings.DefaultSpecification.DefaultReaderName)
                     ? Enum.GetName(typeof(ReaderTypes), settings.DefaultSpecification.DefaultReaderProvider)
                     : settings.DefaultSpecification.DefaultReaderName;
 
-                autoLoadLastUsedDB = settings.DefaultSpecification.AutoLoadProjectOnStart;
-                lastUsedDBPath = settings.DefaultSpecification.LastUsedProjectPath;
-
-                culture = (settings.DefaultSpecification.DefaultLanguage == "german") ? new CultureInfo("de-DE") : new CultureInfo("en-US");
+                ApplyCulture((settings.DefaultSpecification.DefaultLanguage == "german") ? new CultureInfo("de-DE") : new CultureInfo("en-US"));
 
 
                 var dlg = new OpenFileDialogViewModel
@@ -1667,38 +1741,32 @@ namespace RFiDGear.ViewModel
                     }
 
                     Mouse.OverrideCursor = Cursors.AppStarting;
-
-                    if (ChipTasks.TaskCollection != null && ChipTasks.TaskCollection.Count > 0)
+                    try
                     {
-                        ChipTasks.TaskCollection.Clear();
+                        var result = await extensionHost.Project.LoadAsync(dlg.FileName);
+                        if (!result.Success)
+                        {
+                            LogProjectOpenFailure(dlg.FileName, result.Error);
+                            return;
+                        }
+
+                        settings.DefaultSpecification.LastUsedProjectPath = result.CanonicalPath;
+                        await settings.SaveSettings();
                     }
-
-                    await databaseReaderWriter.ReadDatabase(dlg.FileName).ConfigureAwait(false);
-
-                    settings.DefaultSpecification.LastUsedProjectPath = dlg.FileName;
-                    await settings.SaveSettings();
-
-                    foreach (var vm in databaseReaderWriter.TreeViewModel)
+                    finally
                     {
-                        TreeViewParentNodes.Add(vm);
-                    }
-
-                    foreach (var setup in databaseReaderWriter.SetupModel.TaskCollection)
-                    {
-                        await Application.Current.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new Action(() => ChipTasks.TaskCollection.Add(setup)));
+                        Mouse.OverrideCursor = null;
                     }
 
                     SetCurrentProject(dlg.FileName);
                 }
             }
-
-            await Application.Current.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new Action(() =>
-            {
-                Mouse.OverrideCursor = null;
-            }));
-
-            OnPropertyChanged(nameof(ChipTasks));
         }
+
+        /// <summary>Logs a project-open failure without changing the currently loaded project.</summary>
+        private static void LogProjectOpenFailure(string path, ProjectOpenError error) =>
+            Log.ForContext<MainWindowViewModel>()
+                .Warning("Project open rejected for {ProjectPath} with {ProjectOpenError}", path, error);
 
         /// <summary>
         /// Exposes the command to save the current project, falling back to Save As
@@ -1707,17 +1775,40 @@ namespace RFiDGear.ViewModel
         public IAsyncRelayCommand SaveTaskDialogCommand => new AsyncRelayCommand(OnNewSaveTaskDialogCommand);
         private async Task OnNewSaveTaskDialogCommand()
         {
+            var targetPath = ResolveProjectSaveTarget();
+
+            if (targetPath == null)
+            {
+                await OnNewSaveTaskAsDialogCommand();
+                return;
+            }
+
+            TrySaveProject(targetPath);
+        }
+
+        /// <summary>
+        /// Decides which file a plain Save writes to, or <c>null</c> when the user has to choose one (Save As).
+        /// <para>
+        /// When a project is open, Save only ever writes that project. If its file has since been moved or
+        /// deleted the answer is <c>null</c>: falling back to the remembered default here would silently write
+        /// this project's contents over a different project. The remembered default is consulted only when no
+        /// project is open at all, e.g. right after startup without an auto-loaded project.
+        /// </para>
+        /// </summary>
+        /// <returns>An existing project file path, or <c>null</c> if Save As should be offered.</returns>
+        internal string ResolveProjectSaveTarget()
+        {
+            var openProjectPath = extensionHost.Project.CurrentPath;
+
+            if (openProjectPath != null)
+            {
+                return IsValidProjectSavePath(openProjectPath) ? openProjectPath : null;
+            }
+
             using (var settings = settingsReaderWriterFactory())
             {
-                var targetPath = settings.DefaultSpecification.LastUsedProjectPath;
-                if (!IsValidProjectSavePath(targetPath))
-                {
-                    await OnNewSaveTaskAsDialogCommand();
-                    return;
-                }
-
-                databaseReaderWriter.WriteDatabase(ChipTasks, targetPath);
-                SetCurrentProject(targetPath);
+                var rememberedPath = settings.DefaultSpecification.LastUsedProjectPath;
+                return IsValidProjectSavePath(rememberedPath) ? rememberedPath : null;
             }
         }
 
@@ -1752,19 +1843,59 @@ namespace RFiDGear.ViewModel
                 Buttons = MessageBoxButton.YesNo
             };
 
-            if (mbox.Show(Dialogs) == MessageBoxResult.Yes)
+            var setAsDefault = mbox.Show(Dialogs) == MessageBoxResult.Yes;
+
+            await SaveProjectAsAsync(fileName, setAsDefault);
+        }
+
+        /// <summary>
+        /// Saves the project to <paramref name="fileName"/> through the extension host and, only after the file
+        /// was written, remembers the file as the default project when asked to. The remembered path is the one
+        /// the writer actually produced: a name typed without an extension is saved as <c>name.rfPrj</c>, and
+        /// remembering the typed name would leave a path that is never valid. A failed write changes nothing.
+        /// </summary>
+        /// <param name="fileName">The path chosen in the Save As dialog.</param>
+        /// <param name="setAsDefault">Whether to store the written file as <c>LastUsedProjectPath</c>.</param>
+        /// <returns>A task that completes once the project is saved and the default path is stored.</returns>
+        internal async Task SaveProjectAsAsync(string fileName, bool setAsDefault)
+        {
+            if (string.IsNullOrEmpty(fileName) || !TrySaveProject(fileName))
+            {
+                return;
+            }
+
+            if (setAsDefault)
             {
                 using (var settings = settingsReaderWriterFactory())
                 {
-                    settings.DefaultSpecification.LastUsedProjectPath = fileName;
+                    settings.DefaultSpecification.LastUsedProjectPath = extensionHost.Project.CurrentPath;
                     await settings.SaveSettings();
                 }
             }
+        }
 
-            if (!string.IsNullOrEmpty(fileName))
+        /// <summary>
+        /// Writes the project through the extension host, which also keeps its current path in step. Failures
+        /// (a load or edit in progress, an unwritable location) are logged and shown instead of escaping the command.
+        /// </summary>
+        private bool TrySaveProject(string path)
+        {
+            try
             {
-                databaseReaderWriter.WriteDatabase(ChipTasks, fileName);
-                SetCurrentProject(fileName);
+                extensionHost.Project.SaveAs(path);
+                SetCurrentProject(extensionHost.Project.CurrentPath ?? path);
+                return true;
+            }
+            catch (Exception ex) when (ex is InvalidOperationException || ex is IOException || ex is UnauthorizedAccessException)
+            {
+                Log.ForContext<MainWindowViewModel>().Error(ex, "Saving the project to {ProjectPath} failed.", path);
+                Dialogs.Add(new CustomDialogViewModel
+                {
+                    Caption = ResourceLoader.GetResource("messageBoxDefaultCaption"),
+                    Message = ex.Message,
+                    OnOk = sender => sender.Close()
+                });
+                return false;
             }
         }
 
@@ -1956,8 +2087,16 @@ namespace RFiDGear.ViewModel
             get => currentReader;
             set
             {
+                var changed = !string.Equals(currentReader, value, StringComparison.Ordinal);
                 currentReader = value;
                 OnPropertyChanged(nameof(CurrentReader));
+
+                // Extensions read the name through IReaderHost; tell them it moved. Before start-up has built the host
+                // there is nobody to tell, and the host reads the current name when it is asked.
+                if (changed)
+                {
+                    extensionHost?.NotifyReaderStateChanged();
+                }
             }
         }
         private string currentReader;
@@ -2327,7 +2466,7 @@ namespace RFiDGear.ViewModel
                 SetCurrentReader = value => CurrentReader = value,
                 SetReaderProvider = value => ReaderDevice.Reader = value,
                 SetReaderPort = value => ReaderDevice.PortNumber = value,
-                SetCulture = value => culture = value
+                SetCulture = ApplyCulture
             });
 
             if (startupArguments.AutoMode && !IsWriteToAllChipAutoChecked)

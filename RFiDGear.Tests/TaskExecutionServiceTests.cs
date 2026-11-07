@@ -174,6 +174,7 @@ namespace RFiDGear.Tests
         public async Task StructuredLogs_EmitCorrelatedPerTaskOutcomesAndSummary()
         {
             var logger = new CapturingTaskExecutionLogger();
+            TaskExecutionResult executionResult = null;
             var first = new LoggingStubTaskModel
             {
                 CurrentTaskIndex = "10",
@@ -205,7 +206,7 @@ namespace RFiDGear.Tests
 
             await StaTestRunner.RunOnStaThreadAsync(async () =>
             {
-                await BuildService(logger).ExecuteOnceAsync(BuildRequest(descriptors));
+                executionResult = await BuildService(logger).ExecuteOnceAsync(BuildRequest(descriptors));
             });
 
             var outcomes = logger.Entries.Where(entry => entry.Stage == "Task.Outcome").ToList();
@@ -231,6 +232,15 @@ namespace RFiDGear.Tests
             Assert.Equal(0, GetIntProperty(summary.DetailsJson, "Skipped"));
             Assert.Equal(1, GetIntProperty(summary.DetailsJson, "Failed"));
             Assert.Equal(1, GetIntProperty(summary.DetailsJson, "Successful"));
+            Assert.Equal(0, GetIntProperty(summary.DetailsJson, "AcceptedFailures"));
+            Assert.Equal(1, GetIntProperty(summary.DetailsJson, "UnhandledFailures"));
+            Assert.Equal("Failure", GetStringProperty(summary.DetailsJson, "TerminalStatus"));
+
+            Assert.NotNull(executionResult);
+            Assert.Equal(TaskLoopTerminalStatus.Failure, executionResult.TerminalStatus);
+            Assert.Equal(runIds[0], executionResult.RunId);
+            Assert.Single(logger.Entries.Where(entry => entry.Stage == "TaskLoop.Failure"));
+            Assert.Empty(logger.Entries.Where(entry => entry.Stage == "TaskLoop.Success"));
         }
 
         [Fact]
@@ -300,6 +310,421 @@ namespace RFiDGear.Tests
             var summary = Assert.Single(logger.Entries.Where(entry => entry.Stage == "TaskLoop.Summary"));
             Assert.Equal(1, GetIntProperty(summary.DetailsJson, "Executed"));
             Assert.Equal(1, GetIntProperty(summary.DetailsJson, "Failed"));
+        }
+
+        [Fact]
+        public async Task StructuredLogs_EmitIntentionalFailuresWhenNegativeOutcomeIsConsumedByExecutedBranch()
+        {
+            var logger = new CapturingTaskExecutionLogger();
+            TaskExecutionResult executionResult = null;
+            var applicationCheck = new LoggingStubTaskModel
+            {
+                CurrentTaskIndex = "10",
+                SelectedTaskType = "AppExistCheck",
+                SelectedTaskDescription = "Check whether application is absent"
+            };
+            var createApplication = new LoggingStubTaskModel
+            {
+                CurrentTaskIndex = "20",
+                SelectedTaskType = "CreateApplication",
+                SelectedTaskDescription = "Create missing application",
+                SelectedExecuteConditionTaskIndex = "10",
+                SelectedExecuteConditionErrorLevel = ERROR.IsNotTrue
+            };
+
+            var descriptors = new List<TaskDescriptor>
+            {
+                new TaskDescriptor(0, applicationCheck, ct =>
+                {
+                    applicationCheck.CurrentTaskErrorLevel = ERROR.IsNotTrue;
+                    applicationCheck.IsTaskCompletedSuccessfully = false;
+                    return Task.CompletedTask;
+                }),
+                new TaskDescriptor(1, createApplication, ct =>
+                {
+                    createApplication.CurrentTaskErrorLevel = ERROR.NoError;
+                    createApplication.IsTaskCompletedSuccessfully = true;
+                    return Task.CompletedTask;
+                })
+            };
+
+            await StaTestRunner.RunOnStaThreadAsync(async () =>
+            {
+                executionResult = await BuildService(logger).ExecuteOnceAsync(BuildRequest(descriptors));
+            });
+
+            var summary = Assert.Single(logger.Entries.Where(entry => entry.Stage == "TaskLoop.Summary"));
+            Assert.Equal(1, GetIntProperty(summary.DetailsJson, "Failed"));
+            Assert.Equal(1, GetIntProperty(summary.DetailsJson, "AcceptedFailures"));
+            Assert.Equal(0, GetIntProperty(summary.DetailsJson, "UnhandledFailures"));
+            Assert.Equal("CompletedWithIntentionalFailures", GetStringProperty(summary.DetailsJson, "TerminalStatus"));
+
+            Assert.NotNull(executionResult);
+            Assert.Equal(TaskLoopTerminalStatus.CompletedWithIntentionalFailures, executionResult.TerminalStatus);
+            Assert.Single(logger.Entries.Where(entry => entry.Stage == "TaskLoop.CompletedWithIntentionalFailures"));
+            Assert.Empty(logger.Entries.Where(entry => entry.Stage == "TaskLoop.Failure"));
+        }
+
+        [Fact]
+        public void TerminalEvaluator_FailsUnhandledWriteErrorWithConditionalFollowUpSkip()
+        {
+            var writeTask = new LoggingStubTaskModel
+            {
+                CurrentTaskIndex = "50",
+                CurrentTaskErrorLevel = ERROR.Unknown
+            };
+            var readTask = new LoggingStubTaskModel
+            {
+                CurrentTaskIndex = "60",
+                SelectedExecuteConditionTaskIndex = "50",
+                SelectedExecuteConditionErrorLevel = ERROR.NoError
+            };
+            var observations = new List<TaskExecutionObservation>
+            {
+                new TaskExecutionObservation(0, "50", writeTask, "Executed", false, ERROR.Unknown),
+                new TaskExecutionObservation(1, "60", readTask, "Skipped", null, ERROR.Empty, "ExecuteConditionNotMet")
+            };
+
+            var result = TaskLoopTerminalEvaluator.Evaluate(2, observations);
+
+            Assert.Equal(TaskLoopTerminalStatus.Failure, result.TerminalStatus);
+            Assert.Equal(1, result.UnhandledFailures);
+            Assert.Equal(1, result.Skipped);
+            Assert.Equal(0, result.InvalidSkips);
+        }
+
+        [Fact]
+        public void TerminalEvaluator_FailsNonConditionalSkipWithoutTaskFailure()
+        {
+            var task = new LoggingStubTaskModel { CurrentTaskIndex = "10" };
+            var observations = new List<TaskExecutionObservation>
+            {
+                new TaskExecutionObservation(0, "10", task, "Skipped", null, ERROR.Empty, "NotExecuted")
+            };
+
+            var result = TaskLoopTerminalEvaluator.Evaluate(1, observations);
+
+            Assert.Equal(TaskLoopTerminalStatus.Failure, result.TerminalStatus);
+            Assert.Equal(1, result.InvalidSkips);
+        }
+
+        [Fact]
+        public void TerminalEvaluator_AcceptsNotTakenConditionalBranch()
+        {
+            var checkTask = new LoggingStubTaskModel
+            {
+                CurrentTaskIndex = "10",
+                CurrentTaskErrorLevel = ERROR.NoError
+            };
+            var createTask = new LoggingStubTaskModel
+            {
+                CurrentTaskIndex = "20",
+                SelectedExecuteConditionTaskIndex = "10",
+                SelectedExecuteConditionErrorLevel = ERROR.IsNotTrue
+            };
+            var observations = new List<TaskExecutionObservation>
+            {
+                new TaskExecutionObservation(0, "10", checkTask, "Executed", true, ERROR.NoError),
+                new TaskExecutionObservation(1, "20", createTask, "Skipped", null, ERROR.Empty, "ExecuteConditionNotMet")
+            };
+
+            var result = TaskLoopTerminalEvaluator.Evaluate(2, observations);
+
+            Assert.Equal(TaskLoopTerminalStatus.Success, result.TerminalStatus);
+            Assert.Equal(0, result.InvalidSkips);
+        }
+
+        [Fact]
+        public void TerminalEvaluator_AcceptsFailureHandledByExplicitErrorRoute()
+        {
+            var failedTask = new LoggingStubTaskModel
+            {
+                CurrentTaskIndex = "10",
+                CurrentTaskErrorLevel = ERROR.TransportError
+            };
+            var recoveryTask = new LoggingStubTaskModel
+            {
+                CurrentTaskIndex = "90",
+                CurrentTaskErrorLevel = ERROR.NoError
+            };
+            var observations = new List<TaskExecutionObservation>
+            {
+                new TaskExecutionObservation(0, "10", failedTask, "Executed", false, ERROR.TransportError),
+                new TaskExecutionObservation(1, "90", recoveryTask, "Executed", true, ERROR.NoError)
+            };
+            var errorRouting = new Dictionary<ERROR, string>
+            {
+                [ERROR.TransportError] = "90"
+            };
+
+            var result = TaskLoopTerminalEvaluator.Evaluate(2, observations, errorRouting);
+
+            Assert.Equal(TaskLoopTerminalStatus.CompletedWithIntentionalFailures, result.TerminalStatus);
+            Assert.Equal(1, result.AcceptedFailures);
+            Assert.Equal(0, result.UnhandledFailures);
+        }
+
+        // ── tasks the loop never got to ──
+
+        private static TaskExecutionObservation ExecutedOk(int position, string id) =>
+            new TaskExecutionObservation(
+                position, id, new LoggingStubTaskModel { CurrentTaskIndex = id, CurrentTaskErrorLevel = ERROR.NoError },
+                "Executed", true, ERROR.NoError);
+
+        [Fact]
+        public void TerminalEvaluator_FailsWhenTasksRemainAfterTheLastReachedTask()
+        {
+            // The task that ran was fine. The run still must not read as a success: two tasks never started.
+            var observations = new List<TaskExecutionObservation> { ExecutedOk(0, "10") };
+
+            var result = TaskLoopTerminalEvaluator.Evaluate(3, observations);
+
+            Assert.Equal(TaskLoopTerminalStatus.Failure, result.TerminalStatus);
+            Assert.Equal(2, result.NotReached);
+            Assert.Equal(0, result.Failed);
+            Assert.Equal(0, result.UnhandledFailures);
+            Assert.Equal(0, result.Unknown);
+            Assert.Equal(0, result.InvalidSkips);
+        }
+
+        [Fact]
+        public void TerminalEvaluator_FailsWhenOnlyTheLastTaskIsMissing()
+        {
+            var observations = new List<TaskExecutionObservation> { ExecutedOk(0, "10"), ExecutedOk(1, "11") };
+
+            var result = TaskLoopTerminalEvaluator.Evaluate(3, observations);
+
+            Assert.Equal(TaskLoopTerminalStatus.Failure, result.TerminalStatus);
+            Assert.Equal(1, result.NotReached);
+        }
+
+        [Fact]
+        public void TerminalEvaluator_CountsEveryTaskAsNotReachedWhenNothingWasObserved()
+        {
+            var result = TaskLoopTerminalEvaluator.Evaluate(4, new List<TaskExecutionObservation>());
+
+            Assert.Equal(TaskLoopTerminalStatus.Failure, result.TerminalStatus);
+            Assert.Equal(4, result.NotReached);
+        }
+
+        [Fact]
+        public void TerminalEvaluator_SucceedsWhenEveryTaskWasReached()
+        {
+            var observations = new List<TaskExecutionObservation> { ExecutedOk(0, "10"), ExecutedOk(1, "11"), ExecutedOk(2, "12") };
+
+            var result = TaskLoopTerminalEvaluator.Evaluate(3, observations);
+
+            Assert.Equal(TaskLoopTerminalStatus.Success, result.TerminalStatus);
+            Assert.Equal(0, result.NotReached);
+        }
+
+        [Fact]
+        public void TerminalEvaluator_IgnoresTasksThatErrorRoutingJumpedOver()
+        {
+            // Task 0 fails with AuthFailure and the route sends the run to "90" (position 3), skipping 1 and 2 on
+            // purpose. Positions 1 and 2 lie before a task the run did reach, so they are not "left behind".
+            var failedTask = new LoggingStubTaskModel { CurrentTaskIndex = "10", CurrentTaskErrorLevel = ERROR.AuthFailure };
+            var recovery = new LoggingStubTaskModel { CurrentTaskIndex = "90", CurrentTaskErrorLevel = ERROR.NoError };
+            var observations = new List<TaskExecutionObservation>
+            {
+                new TaskExecutionObservation(0, "10", failedTask, "Executed", false, ERROR.AuthFailure),
+                new TaskExecutionObservation(3, "90", recovery, "Executed", true, ERROR.NoError)
+            };
+            var errorRouting = new Dictionary<ERROR, string> { [ERROR.AuthFailure] = "90" };
+
+            var result = TaskLoopTerminalEvaluator.Evaluate(4, observations, errorRouting);
+
+            Assert.Equal(TaskLoopTerminalStatus.CompletedWithIntentionalFailures, result.TerminalStatus);
+            Assert.Equal(0, result.NotReached);
+        }
+
+        [Fact]
+        public void TerminalEvaluator_FailsWhenTasksRemainAfterARoutingTarget()
+        {
+            // Same jump, but the run then stopped before the last task: the tail is still left behind.
+            var failedTask = new LoggingStubTaskModel { CurrentTaskIndex = "10", CurrentTaskErrorLevel = ERROR.AuthFailure };
+            var recovery = new LoggingStubTaskModel { CurrentTaskIndex = "90", CurrentTaskErrorLevel = ERROR.NoError };
+            var observations = new List<TaskExecutionObservation>
+            {
+                new TaskExecutionObservation(0, "10", failedTask, "Executed", false, ERROR.AuthFailure),
+                new TaskExecutionObservation(2, "90", recovery, "Executed", true, ERROR.NoError)
+            };
+            var errorRouting = new Dictionary<ERROR, string> { [ERROR.AuthFailure] = "90" };
+
+            var result = TaskLoopTerminalEvaluator.Evaluate(5, observations, errorRouting);
+
+            Assert.Equal(TaskLoopTerminalStatus.Failure, result.TerminalStatus);
+            Assert.Equal(2, result.NotReached);
+        }
+
+        [Fact]
+        public void TerminalEvaluator_SelectedTaskOnly_DoesNotExpectTheOtherTasks()
+        {
+            var observations = new List<TaskExecutionObservation> { ExecutedOk(2, "12") };
+
+            var result = TaskLoopTerminalEvaluator.Evaluate(5, observations, selectedTaskOnly: true);
+
+            Assert.Equal(TaskLoopTerminalStatus.Success, result.TerminalStatus);
+            Assert.Equal(0, result.NotReached);
+        }
+
+        [Fact]
+        public void TerminalEvaluator_SelectedTaskOnly_StillFailsWhenNothingRan()
+        {
+            var result = TaskLoopTerminalEvaluator.Evaluate(5, new List<TaskExecutionObservation>(), selectedTaskOnly: true);
+
+            Assert.Equal(TaskLoopTerminalStatus.Failure, result.TerminalStatus);
+        }
+
+        [Fact]
+        public async Task ErrorRoutingJumpingOverATask_InARealRun_DoesNotMakeItAFailure()
+        {
+            var failing = new StubTaskModel { CurrentTaskIndex = "10" };
+            var jumpedOver = new StubTaskModel { CurrentTaskIndex = "20" };
+            var recovery = new StubTaskModel { CurrentTaskIndex = "90" };
+            var jumpedOverRan = 0;
+            var observations = new List<TaskExecutionObservation>();
+            var logger = new CapturingTaskExecutionLogger();
+
+            var descriptors = new List<TaskDescriptor>
+            {
+                new TaskDescriptor(0, failing, ct =>
+                {
+                    failing.CurrentTaskErrorLevel = ERROR.AuthFailure;
+                    failing.IsTaskCompletedSuccessfully = false;
+                    return Task.CompletedTask;
+                }),
+                new TaskDescriptor(1, jumpedOver, ct => { jumpedOverRan++; return Task.CompletedTask; }),
+                new TaskDescriptor(2, recovery, ct =>
+                {
+                    recovery.CurrentTaskErrorLevel = ERROR.NoError;
+                    recovery.IsTaskCompletedSuccessfully = true;
+                    return Task.CompletedTask;
+                })
+            };
+            var request = BuildRequest(descriptors);
+            request.ErrorRouting = new Dictionary<ERROR, string> { [ERROR.AuthFailure] = "90" };
+            request.Observations = observations;
+
+            TaskExecutionResult? result = null;
+            await StaTestRunner.RunOnStaThreadAsync(async () =>
+            {
+                result = await BuildService(logger).ExecuteOnceAsync(request);
+            });
+
+            Assert.NotNull(result);
+            Assert.Equal(0, jumpedOverRan);
+            Assert.Equal(new[] { 0, 2 }, observations.Select(o => o.TaskPosition));
+            Assert.Equal(TaskLoopTerminalStatus.CompletedWithIntentionalFailures, result.TerminalStatus);
+            var summary = Assert.Single(logger.Entries.Where(entry => entry.Stage == "TaskLoop.Summary"));
+            Assert.Equal(0, GetIntProperty(summary.DetailsJson, "NotReached"));
+        }
+
+        [Fact]
+        public async Task ARunThatEndsBeforeItsLastTask_InARealRun_ReturnsFailureAndLogsTheUnreachedTail()
+        {
+            // The Release watchdog that ends a run early is compiled out of this build, so an error-routing target
+            // outside the task list stands in for it: the loop leaves the list after the first task and never
+            // returns to the other two. Every task that ran succeeded, so only the unreached tail can fail the run.
+            var first = new StubTaskModel { CurrentTaskIndex = "10" };
+            var second = new StubTaskModel { CurrentTaskIndex = "11" };
+            var outsideTheList = new StubTaskModel { CurrentTaskIndex = "90" };
+            var logger = new CapturingTaskExecutionLogger();
+            var descriptors = new List<TaskDescriptor>
+            {
+                new TaskDescriptor(0, first, ct =>
+                {
+                    first.CurrentTaskErrorLevel = ERROR.ProtocolConstraint;   // routed
+                    first.IsTaskCompletedSuccessfully = true;
+                    return Task.CompletedTask;
+                }),
+                new TaskDescriptor(1, second, ct => Task.CompletedTask),
+                new TaskDescriptor(7, outsideTheList, ct => Task.CompletedTask), // Index 7 is past the end of the list
+            };
+            var request = BuildRequest(descriptors);
+            request.ErrorRouting = new Dictionary<ERROR, string> { [ERROR.ProtocolConstraint] = "90" };
+
+            TaskExecutionResult? result = null;
+            await StaTestRunner.RunOnStaThreadAsync(async () =>
+            {
+                result = await BuildService(logger).ExecuteOnceAsync(request);
+            });
+
+            Assert.NotNull(result);
+            Assert.Equal(TaskLoopTerminalStatus.Failure, result.TerminalStatus);
+            var summary = Assert.Single(logger.Entries.Where(entry => entry.Stage == "TaskLoop.Summary"));
+            Assert.Equal(2, GetIntProperty(summary.DetailsJson, "NotReached"));
+            Assert.Equal(0, GetIntProperty(summary.DetailsJson, "UnhandledFailures"));
+        }
+
+        [Fact]
+        public async Task ARunCutShortByAFault_LogsHowManyTasksWereNeverReached()
+        {
+            var logger = new CapturingTaskExecutionLogger();
+            var tasks = new[]
+            {
+                new StubTaskModel { CurrentTaskIndex = "10" },
+                new StubTaskModel { CurrentTaskIndex = "11" },
+                new StubTaskModel { CurrentTaskIndex = "12" }
+            };
+            var descriptors = new List<TaskDescriptor>
+            {
+                new TaskDescriptor(0, tasks[0], ct => { tasks[0].IsTaskCompletedSuccessfully = true; return Task.CompletedTask; }),
+                new TaskDescriptor(1, tasks[1], ct => throw new InvalidOperationException("reader gone")),
+                new TaskDescriptor(2, tasks[2], ct => Task.CompletedTask)
+            };
+
+            await StaTestRunner.RunOnStaThreadAsync(async () =>
+            {
+                await Assert.ThrowsAsync<InvalidOperationException>(
+                    () => BuildService(logger).ExecuteOnceAsync(BuildRequest(descriptors)));
+            });
+
+            // The summary is written even when the loop throws; the third task was never started.
+            var summary = Assert.Single(logger.Entries.Where(entry => entry.Stage == "TaskLoop.Summary"));
+            Assert.Equal(1, GetIntProperty(summary.DetailsJson, "NotReached"));
+            Assert.Equal("Failure", GetStringProperty(summary.DetailsJson, "TerminalStatus"));
+        }
+
+        [Fact]
+        public async Task RunSelectedOnly_InARealRun_IsNotAFailureBecauseTheOtherTasksDidNotRun()
+        {
+            var tasks = new[]
+            {
+                new StubTaskModel { CurrentTaskIndex = "0" },
+                new StubTaskModel { CurrentTaskIndex = "1" },
+                new StubTaskModel { CurrentTaskIndex = "2" }
+            };
+            var invokeCounts = new int[3];
+            var descriptors = tasks
+                .Select((task, i) => new TaskDescriptor(i, task, ct =>
+                {
+                    invokeCounts[i]++;
+                    task.CurrentTaskErrorLevel = ERROR.NoError;
+                    task.IsTaskCompletedSuccessfully = true;
+                    return Task.CompletedTask;
+                }))
+                .ToList();
+            var handler = new ChipTaskHandlerModel();
+            foreach (var task in tasks)
+            {
+                handler.TaskCollection.Add(task);
+            }
+
+            var request = BuildRequest(descriptors);
+            request.TaskHandler = handler;
+            request.RunSelectedOnly = true;
+            request.SelectedSetupViewModel = tasks[1];
+
+            TaskExecutionResult? result = null;
+            await StaTestRunner.RunOnStaThreadAsync(async () =>
+            {
+                result = await BuildService().ExecuteOnceAsync(request);
+            });
+
+            Assert.NotNull(result);
+            Assert.Equal(new[] { 0, 1, 0 }, invokeCounts);
+            Assert.Equal(TaskLoopTerminalStatus.Success, result.TerminalStatus);
         }
 
         private static string GetStringProperty(string json, string propertyName)

@@ -175,6 +175,12 @@ slot of an available reader</value>
   <data name="messageBoxRestartRequiredMessage" xml:space="preserve">
     <value>The Software needs to be restarted in Order to apply these changes. Click 'OK' to proceed.</value>
   </data>
+  <data name="messageBoxExtensionOpenFailedCaption" xml:space="preserve">
+    <value>Extension</value>
+  </data>
+  <data name="messageBoxExtensionOpenFailedMessage" xml:space="preserve">
+    <value>The extension '{0}' could not be opened. Details are in the application log.</value>
+  </data>
   <data name="menuItemFileHeader" xml:space="preserve">
     <value>_File</value>
   </data>
@@ -1869,5 +1875,11 @@ https://github.com/c3rebro/RFiDGear</value>
   </data>
   <data name="checkBoxCheckChangeKeyCondition" xml:space="preserve">
     <value>Also check change-key condition</value>
+  </data>
+  <data name="labelCurrentDesfireKeySettingsContext" xml:space="preserve">
+    <value>Current key settings (ChangeKey context; not modified)</value>
+  </data>
+  <data name="labelTargetDesfireKeySettings" xml:space="preserve">
+    <value>New key settings to apply</value>
   </data>
 </root>

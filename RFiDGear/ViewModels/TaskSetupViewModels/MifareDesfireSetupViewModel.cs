@@ -597,7 +597,7 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
         /// <param name="NewTargetKeyVersion">Version byte for the new key.</param>
         /// <param name="MasterKeyHex">Authentication key value (key 0 when policy requires it).</param>
         /// <param name="MasterKeyType">Cryptographic type of the authentication key.</param>
-        /// <param name="KeySettings">Key settings bits used to drive authentication policy.</param>
+        /// <param name="CurrentKeySettings">Current key settings used for authentication policy and provider builder context. They are not modified.</param>
         internal sealed record AppKeyChangePayload(
             uint AppId,
             byte TargetKeyNo,
@@ -607,7 +607,7 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
             byte NewTargetKeyVersion,
             string MasterKeyHex,
             DESFireKeyType MasterKeyType,
-            DESFireKeySettings KeySettings);
+            DESFireKeySettings CurrentKeySettings);
 
         /// <summary>
         /// Builds the input payload for changing an application key.
@@ -616,14 +616,14 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
         /// <param name="keyNumberForChange">Target key slot number.</param>
         /// <param name="authKeyHex">Authentication key value (master key or targeted key).</param>
         /// <param name="oldKeyForTargetSlot">Current key value for the target slot.</param>
-        /// <param name="keySettings">Key settings bits used to drive authentication policy.</param>
+        /// <param name="currentKeySettings">Current key settings used for authentication policy and provider builder context.</param>
         /// <returns>Resolved change-key payload for provider calls.</returns>
         internal AppKeyChangePayload BuildAppKeyChangePayload(
             int appId,
             int keyNumberForChange,
             string authKeyHex,
             string oldKeyForTargetSlot,
-            DESFireKeySettings keySettings)
+            DESFireKeySettings currentKeySettings)
         {
             return new AppKeyChangePayload(
                 (uint)appId,
@@ -634,7 +634,7 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
                 (byte)selectedDesfireAppKeyVersionTargetAsInt,
                 authKeyHex,
                 SelectedDesfireAppKeyEncryptionTypeCurrent,
-                keySettings);
+                currentKeySettings);
         }
 
         private DESFireKeySettings GetGeneralDesfireKeyFlags()
@@ -731,17 +731,23 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
         /// Determines the authentication key number for change-app-key operations.
         /// </summary>
         /// <param name="appId">Current application identifier.</param>
-        /// <param name="changeKeyMode">Selected change-key policy for the app.</param>
+        /// <param name="currentKeySettings">Complete current key settings for the selected scope.</param>
         /// <param name="appKeyNumber">Selected application key number.</param>
-        internal static int GetAuthKeyNumberForChangeAppKey(int appId, DESFireKeySettings changeKeyMode, int appKeyNumber)
+        internal static int GetAuthKeyNumberForChangeAppKey(int appId, DESFireKeySettings currentKeySettings, int appKeyNumber)
         {
             if (appId == 0)
             {
                 return 0;
             }
 
-            return changeKeyMode == DESFireKeySettings.ChangeKeyWithMasterKey ? 0 : appKeyNumber;
+            var changeKeyMode = currentKeySettings & DESFireKeySettings.ChangeKeyFrozen;
+            return changeKeyMode == DESFireKeySettings.ChangeKeyWithTargetedKeyNumber
+                ? appKeyNumber
+                : 0;
         }
+
+        internal static bool IsChangeKeyFrozen(DESFireKeySettings currentKeySettings) =>
+            (currentKeySettings & DESFireKeySettings.ChangeKeyFrozen) == DESFireKeySettings.ChangeKeyFrozen;
 
         /// <summary>
         /// Builds a warning line for frozen change-key policies.
@@ -755,23 +761,18 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
         }
 
         /// <summary>
-        /// Appends authentication diagnostic status lines for change-app-key operations.
+        /// Appends an authentication diagnostic status line for change-app-key operations.
         /// </summary>
         /// <param name="authKeyNo">Authentication key number used for the app.</param>
-        /// <param name="changeKeyMode">Selected change-key policy for the app.</param>
-        private void AppendChangeAppKeyAuthStatusLines(int authKeyNo, DESFireKeySettings changeKeyMode)
+        /// <param name="currentKeySettings">Complete current settings used as ChangeKey context.</param>
+        private void AppendChangeAppKeyAuthStatusLine(int authKeyNo, DESFireKeySettings currentKeySettings)
         {
             StatusText += BuildChangeAppKeyAuthStatusLine(
                 DateTime.Now,
                 AppNumberCurrentAsInt,
                 selectedDesfireAppKeyNumberCurrentAsInt,
-                (DESFireKeySettings)SelectedDesfireAppKeySettingsCreateNewApp,
+                currentKeySettings,
                 authKeyNo);
-
-            if (changeKeyMode == DESFireKeySettings.ChangeKeyFrozen)
-            {
-                StatusText += BuildChangeKeyFrozenWarningLine(DateTime.Now);
-            }
         }
 
         private DESFireKeySettings BuildSelectedKeySettings(int appId)
@@ -893,6 +894,8 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
                 OnPropertyChanged(nameof(IsFormatTaskSelected));
                 OnPropertyChanged(nameof(ShowAppKeyTargetInputs));
                 OnPropertyChanged(nameof(ShowAppKeySettingsInputs));
+                OnPropertyChanged(nameof(ShowAppKeySettingsEditButton));
+                OnPropertyChanged(nameof(KeySettingsPanelHeader));
                 OnPropertyChanged(nameof(ShowAppKeyTargetSection));
                 OnPropertyChanged(nameof(ShowPiccMasterKeyTargetInputs));
                 OnPropertyChanged(nameof(ShowPiccMasterKeySettingsInputs));
@@ -929,11 +932,32 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
         public bool ShowAppKeyTargetInputs => SelectedTaskType == TaskType_MifareDesfireTask.ApplicationKeyChangeover;
 
         /// <summary>
-        /// Gets a value indicating whether UI elements for configuring application key settings should be shown.
-        /// The settings check boxes are unnecessary when only changing the application key material.
+        /// Gets a value indicating whether the application key-settings controls should be shown.
+        /// A key-change task uses them as the current ChangeKey builder context; a settings-change
+        /// task uses them as the target settings to apply.
         /// </summary>
         [XmlIgnore]
-        public bool ShowAppKeySettingsInputs => SelectedTaskType == TaskType_MifareDesfireTask.ApplicationKeySettingsChangeover;
+        public bool ShowAppKeySettingsInputs =>
+            SelectedTaskType == TaskType_MifareDesfireTask.ApplicationKeyChangeover ||
+            SelectedTaskType == TaskType_MifareDesfireTask.ApplicationKeySettingsChangeover;
+
+        /// <summary>
+        /// Gets a value indicating whether the application "Update Key Settings" action should be shown.
+        /// Key-change tasks display the settings as context only and must not expose this action.
+        /// </summary>
+        [XmlIgnore]
+        public bool ShowAppKeySettingsEditButton =>
+            SelectedTaskType == TaskType_MifareDesfireTask.ApplicationKeySettingsChangeover;
+
+        /// <summary>
+        /// Describes whether the visible settings are current ChangeKey context or target settings.
+        /// </summary>
+        [XmlIgnore]
+        public string KeySettingsPanelHeader => ResourceLoader.GetResource(
+            SelectedTaskType == TaskType_MifareDesfireTask.ApplicationKeyChangeover ||
+            SelectedTaskType == TaskType_MifareDesfireTask.PICCMasterKeyChangeover
+                ? "labelCurrentDesfireKeySettingsContext"
+                : "labelTargetDesfireKeySettings");
 
         /// <summary>
         /// Gets a value indicating whether the target application key settings section should be shown.
@@ -990,14 +1014,16 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
         public bool ShowPiccMasterKeySettingsEditButton => SelectedTaskType == TaskType_MifareDesfireTask.PICCMasterKeySettingsChangeover;
 
         /// <summary>
-        /// Gets a value indicating whether UI elements for configuring PICC master key settings should be shown.
-        /// Settings controls are unnecessary when only changing the PICC master key material.
-        /// Also shown for <see cref="TaskType_MifareDesfireTask.ReadAppSettings"/>, where the checkboxes
-        /// (and the check-mode radio buttons inside the same group box) hold the EXPECTED key settings.
+        /// Gets a value indicating whether the PICC key-settings controls should be shown.
+        /// A key-change task uses them as ELATEC builder context; a settings-change task uses
+        /// them as the target settings to apply. Also shown for <see cref="TaskType_MifareDesfireTask.ReadAppSettings"/>,
+        /// where the checkboxes (and the check-mode radio buttons inside the same group box) hold the EXPECTED key settings.
         /// </summary>
         [XmlIgnore]
-        public bool ShowPiccMasterKeySettingsInputs => SelectedTaskType == TaskType_MifareDesfireTask.PICCMasterKeySettingsChangeover
-                                                       || SelectedTaskType == TaskType_MifareDesfireTask.ReadAppSettings;
+        public bool ShowPiccMasterKeySettingsInputs =>
+            SelectedTaskType == TaskType_MifareDesfireTask.PICCMasterKeyChangeover ||
+            SelectedTaskType == TaskType_MifareDesfireTask.PICCMasterKeySettingsChangeover ||
+            SelectedTaskType == TaskType_MifareDesfireTask.ReadAppSettings;
 
         /// <summary>
         /// Gets a value indicating whether the check-mode radio buttons should be shown.
@@ -3496,11 +3522,19 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
 
                     StatusText = string.Format("{0}: {1}\n", DateTime.Now, ResourceLoader.GetResource("textBoxStatusTextBoxDllLoaded"));
 
-                    var changeKeyMode = GetChangeKeyModeForApplication(AppNumberCurrentAsInt);
+                    var currentKeySettings = BuildSelectedKeySettings(AppNumberCurrentAsInt);
                     var authKeyNo = GetAuthKeyNumberForChangeAppKey(
                         AppNumberCurrentAsInt,
-                        changeKeyMode,
+                        currentKeySettings,
                         selectedDesfireAppKeyNumberCurrentAsInt);
+
+                    if (IsChangeKeyFrozen(currentKeySettings))
+                    {
+                        StatusText += BuildChangeKeyFrozenWarningLine(DateTime.Now);
+                        CurrentTaskErrorLevel = ERROR.ProtocolConstraint;
+                        await UpdateReaderStatusCommand.ExecuteAsync(false);
+                        return;
+                    }
 
                     var authKeyValue = DesfireAppKeyCurrent;
                     var oldKeyForTargetSlot = ShowAppKeyOldInputs ? DesfireAppKeyCurrentOld : DesfireAppKeyCurrent;
@@ -3512,7 +3546,7 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
 
                     if (isAuthKeyValid && isOldKeyValid)
                     {
-                        AppendChangeAppKeyAuthStatusLines(authKeyNo, changeKeyMode);
+                        AppendChangeAppKeyAuthStatusLine(authKeyNo, currentKeySettings);
 
                         var result = await device.AuthToMifareDesfireApplication(
                                 authKeyValue,
@@ -3529,13 +3563,12 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
                             StatusText += string.Format("{0}: Successfully Authenticated to AppID {1}\n", DateTime.Now, AppNumberCurrentAsInt);
                             await TryUpdateKeyVersionAsync(device, keyNumberForChange);
 
-                            var keySettings = GetChangeKeyModeForApplication(AppNumberCurrentAsInt);
                             var payload = BuildAppKeyChangePayload(
                                 AppNumberCurrentAsInt,
                                 keyNumberForChange,
                                 authKeyValue,
                                 oldKeyForTargetSlot,
-                                keySettings);
+                                currentKeySettings);
 
                             var changeCommandResult = await device.ChangeMifareDesfireKeyAsync(
                                 payload.AppId,
@@ -3546,7 +3579,7 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
                                 payload.NewTargetKeyVersion,
                                 payload.MasterKeyHex,
                                 payload.MasterKeyType,
-                                payload.KeySettings);
+                                payload.CurrentKeySettings);
 
                             // Verify the change by authenticating with the new key in a fresh session.
                             // This is the authoritative result — some providers report AuthFailure from
@@ -4054,7 +4087,7 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
 
                     if (IsValidDesfireKeyValue(DesfireMasterKeyCurrent, SelectedDesfireMasterKeyEncryptionTypeCurrent))
                     {
-                        var keySettings = GetPiccMasterKeyChangeSettings();
+                        var currentKeySettings = BuildSelectedKeySettings(0);
 
                         // Authenticate with the configured current PICC master key itself. Do NOT use
                         // CustomConverter.DesfireKeyToCheck here: it is a shared static that merely holds
@@ -4084,7 +4117,17 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
                                     (byte)keyVersionTargetAsInt,
                                     DesfireMasterKeyCurrent,
                                     SelectedDesfireMasterKeyEncryptionTypeCurrent,
-                                    keySettings);
+                                    currentKeySettings);
+
+                                if (result == ERROR.NoError)
+                                {
+                                    result = await VerifyChangedApplicationKeyAsync(
+                                        device,
+                                        0,
+                                        0,
+                                        DesfireMasterKeyTarget,
+                                        SelectedDesfireMasterKeyEncryptionTypeTarget);
+                                }
 
                                 if (result == ERROR.NoError)
                                 {
@@ -4129,11 +4172,6 @@ namespace RFiDGear.ViewModel.TaskSetupViewModels
             await FinalizeTaskAsync();
             return;
         }
-
-        /// <summary>
-        /// Returns the minimal key settings used when changing the PICC master key.
-        /// </summary>
-        internal static DESFireKeySettings GetPiccMasterKeyChangeSettings() => DESFireKeySettings.ChangeKeyWithMasterKey;
 
         /// <summary>
         /// Returns the application whose key settings an "update key settings" operation targets:
