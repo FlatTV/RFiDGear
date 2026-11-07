@@ -1,3 +1,4 @@
+#nullable enable
 using RFiDGear.Contracts;
 using RFiDGear.Infrastructure.FileAccess;
 using RFiDGear.Infrastructure.Tasks.Interfaces;
@@ -10,7 +11,8 @@ namespace RFiDGear.Infrastructure.ExtensionHost
 {
     /// <summary>
     /// <see cref="IRFiDGearExtensionHost"/> implementation that runs without a WPF window.
-    /// Used directly by the HIL test project and exported via MEF for UI extensions.
+    /// Used directly by the HIL test project; the main application creates one and passes it to an application
+    /// extension when the user opens it (<c>IApplicationUIExtension.CreateContent</c>).
     /// </summary>
     public sealed class HeadlessExtensionHost : IRFiDGearExtensionHost, IDisposable
     {
@@ -18,6 +20,7 @@ namespace RFiDGear.Infrastructure.ExtensionHost
         private readonly TaskExecHostImpl _execution;
         private readonly ReaderHostImpl _reader;
         private readonly NullAutoModeHost _autoMode;
+        private readonly AppContextImpl _appContext;
         private bool _disposed;
 
         /// <summary>
@@ -29,7 +32,9 @@ namespace RFiDGear.Infrastructure.ExtensionHost
         public HeadlessExtensionHost(string readerName = "")
         {
             var dbRW = new DatabaseReaderWriter();
-            _project = new ProjectHostImpl(dbRW);
+            var coordinator = new ExtensionOperationCoordinator();
+
+            _project = new ProjectHostImpl(dbRW, coordinator);
 
             var timerReadChip = new NullDispatcherTimerAdapter();
             var timerTimeout = new NullDispatcherTimerAdapter();
@@ -38,9 +43,10 @@ namespace RFiDGear.Infrastructure.ExtensionHost
                 timerReadChip,
                 timerTimeout);
 
-            _execution = new TaskExecHostImpl(execService, _project);
+            _execution = new TaskExecHostImpl(execService, _project, coordinator);
             _reader = new ReaderHostImpl(readerName);
             _autoMode = new NullAutoModeHost();
+            _appContext = new AppContextImpl();
         }
 
         /// <summary>
@@ -55,40 +61,87 @@ namespace RFiDGear.Infrastructure.ExtensionHost
             ITaskExecutionService execService,
             string readerName)
         {
-            _project = new ProjectHostImpl(dbRW ?? throw new ArgumentNullException(nameof(dbRW)));
+            var coordinator = new ExtensionOperationCoordinator();
+            _project = new ProjectHostImpl(
+                dbRW ?? throw new ArgumentNullException(nameof(dbRW)),
+                coordinator);
             _execution = new TaskExecHostImpl(
                 execService ?? throw new ArgumentNullException(nameof(execService)),
-                _project);
+                _project,
+                coordinator);
             _reader = new ReaderHostImpl(readerName ?? string.Empty);
             _autoMode = new NullAutoModeHost();
+            _appContext = new AppContextImpl();
         }
 
         /// <summary>
         /// Creates a host wired to the main application's live view-model state.
-        /// The <paramref name="liveModelAccessor"/> delegate always returns the current
-        /// <c>taskHandler</c>, keeping the host in sync even when the task collection is replaced.
         /// </summary>
         /// <param name="dbRW">Used for load/save operations.</param>
         /// <param name="execService">The application's running task execution service.</param>
-        /// <param name="liveModelAccessor">Always returns the authoritative <c>ChipTaskHandlerModel</c>.</param>
-        /// <param name="notifyCollectionReplaced">Called when <see cref="IProjectHost.ReplaceTaskCollection"/> changes the collection.</param>
+        /// <param name="liveModelAccessor">Always returns the authoritative live <c>ChipTaskHandlerModel</c>.</param>
+        /// <param name="dispatch">
+        /// Invokes an <see cref="Action"/> on the WPF dispatcher thread and returns a <see cref="System.Threading.Tasks.Task"/>
+        /// that completes when the action has run.
+        /// Typically: <c>action => Application.Current.Dispatcher.InvokeAsync(action).Task</c>.
+        /// </param>
+        /// <param name="applyToLiveApp">
+        /// Called on the dispatcher thread after a successful load to push the loaded task model
+        /// into WPF-bound properties. It must leave state that is not part of the project untouched,
+        /// such as the chip tree that shows cards detected by the reader.
+        /// </param>
         /// <param name="readerName">Display name of the configured reader.</param>
+        /// <param name="coordinator">
+        /// Application-scoped admission gate shared with the host UI's own load and execute operations.
+        /// Passing a coordinator owned by <c>MainWindowViewModel</c> ensures that extension operations
+        /// and direct UI calls cannot interleave.
+        /// </param>
+        /// <param name="getConfiguredLanguage">
+        /// Optional delegate returning <c>"german"</c> or <c>"english"</c> from application settings.
+        /// When provided, <see cref="IAppContext.UICultureName"/> reflects the user's language choice.
+        /// The delegate is called once, on the constructing thread, while the host is being created, to record the
+        /// language that <see cref="IAppContext.CultureChanged"/> is measured against; it must be safe to call then.
+        /// </param>
+        /// <param name="isOnUiThread">
+        /// Optional delegate returning <c>true</c> when the calling thread is the UI thread. When provided, the obsolete
+        /// synchronous <c>Project.Load</c> throws on that thread instead of deadlocking.
+        /// </param>
+        /// <param name="getReaderName">
+        /// Optional delegate returning the display name of the reader the user has selected. When provided it is read
+        /// each time <see cref="IReaderHost.ReaderName"/> is, and <paramref name="readerName"/> is ignored, so the name
+        /// follows the reader the user selects while the application runs. Pair it with
+        /// <see cref="NotifyReaderStateChanged"/> to tell extensions when it changes.
+        /// </param>
         public HeadlessExtensionHost(
             DatabaseReaderWriter dbRW,
             ITaskExecutionService execService,
             Func<Models.ChipTaskHandlerModel> liveModelAccessor,
-            Action notifyCollectionReplaced,
-            string readerName)
+            Func<Action, System.Threading.Tasks.Task> dispatch,
+            Action<Models.ChipTaskHandlerModel> applyToLiveApp,
+            string readerName,
+            ExtensionOperationCoordinator coordinator,
+            Func<string?>? getConfiguredLanguage = null,
+            Func<bool>? isOnUiThread = null,
+            Func<string?>? getReaderName = null)
         {
             _project = new ProjectHostImpl(
                 dbRW ?? throw new ArgumentNullException(nameof(dbRW)),
+                coordinator ?? throw new ArgumentNullException(nameof(coordinator)),
                 liveModelAccessor ?? throw new ArgumentNullException(nameof(liveModelAccessor)),
-                notifyCollectionReplaced ?? (() => { }));
+                dispatch ?? throw new ArgumentNullException(nameof(dispatch)),
+                applyToLiveApp ?? throw new ArgumentNullException(nameof(applyToLiveApp)),
+                isOnUiThread);
             _execution = new TaskExecHostImpl(
                 execService ?? throw new ArgumentNullException(nameof(execService)),
-                _project);
-            _reader = new ReaderHostImpl(readerName ?? string.Empty);
+                _project,
+                coordinator);
+            _reader = getReaderName != null
+                ? new ReaderHostImpl(getReaderName)
+                : new ReaderHostImpl(readerName ?? string.Empty);
             _autoMode = new NullAutoModeHost();
+            _appContext = getConfiguredLanguage != null
+                ? new AppContextImpl(getConfiguredLanguage)
+                : new AppContextImpl();
         }
 
         /// <inheritdoc/>
@@ -103,11 +156,22 @@ namespace RFiDGear.Infrastructure.ExtensionHost
         /// <inheritdoc/>
         public IAutoModeHost AutoMode => _autoMode;
 
+        /// <inheritdoc/>
+        public IAppContext AppContext => _appContext;
+
         /// <summary>
         /// Notifies the reader host that connection or card state may have changed.
         /// Call this from the main application's reader polling loop.
         /// </summary>
         public void NotifyReaderStateChanged() => _reader.RaiseStateChanged();
+
+        /// <summary>
+        /// Tells the host that the application has just changed the language it works with. If
+        /// <see cref="IAppContext.UICultureName"/> now reports a different language than before,
+        /// <see cref="IAppContext.CultureChanged"/> is raised once, synchronously on the calling thread; otherwise
+        /// nothing happens. Call this on the UI thread right after assigning the language.
+        /// </summary>
+        internal void NotifyCultureMayHaveChanged() => _appContext.NotifyCultureMayHaveChanged();
 
         /// <summary>
         /// Returns a one-line-per-task summary of the last run's error levels and success flags.

@@ -175,6 +175,12 @@ ein Kartenlesegerät auswählen</value>
   <data name="messageBoxRestartRequiredMessage" xml:space="preserve">
     <value>Die Software muss neu gestartet werden damit die Änderungen wirksam werden. Klicken Sie auf 'OK' um die Software zu schließen.</value>
   </data>
+  <data name="messageBoxExtensionOpenFailedCaption" xml:space="preserve">
+    <value>Erweiterung</value>
+  </data>
+  <data name="messageBoxExtensionOpenFailedMessage" xml:space="preserve">
+    <value>Die Erweiterung '{0}' konnte nicht geöffnet werden. Einzelheiten stehen im Anwendungsprotokoll.</value>
+  </data>
   <data name="menuItemFileHeader" xml:space="preserve">
     <value>_Datei</value>
   </data>
@@ -1891,5 +1897,11 @@ https://github.com/c3rebro/RFiDGear</value>
   </data>
   <data name="checkBoxCheckChangeKeyCondition" xml:space="preserve">
     <value>Key-Wechsel-Bedingung mitprüfen</value>
+  </data>
+  <data name="labelCurrentDesfireKeySettingsContext" xml:space="preserve">
+    <value>Aktuelle Schlüsseleinstellungen (ChangeKey-Kontext; werden nicht geändert)</value>
+  </data>
+  <data name="labelTargetDesfireKeySettings" xml:space="preserve">
+    <value>Neue anzuwendende Schlüsseleinstellungen</value>
   </data>
 </root>

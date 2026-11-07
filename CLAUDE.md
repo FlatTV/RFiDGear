@@ -20,6 +20,20 @@ dotnet test RFiDGear.Tests/RFiDGear.Tests.csproj
 dotnet test RFiDGear.Tests/RFiDGear.Tests.csproj --filter "FullyQualifiedName~MyTestClass.MyTestMethod"
 ```
 
+After a build, the extensions can be copied to
+`%ProgramData%\RFiDGear\Extensions`:
+
+```powershell
+dotnet build RFiDGear.Extensions/CardCheckAssistant `
+  -p:DeployExtensionsToRFiDGear=true
+```
+
+The environment variable `RFIDGEAR_DEPLOY_EXTENSIONS=true` or a git-ignored
+`RFiDGear.Extensions/deploy.local.props` turn it on for every build. It is off
+by default on purpose: tests, clean checkouts and mutation runs also build the
+extensions and must not write into a real RFiDGear. See
+`RFiDGear.Extensions/DeployToRFiDGear.targets`.
+
 The solution targets `net8.0-windows`. Tests require the `EnableWindowsTargeting` MSBuild property (already set in the test project) for non-Windows dev environments. Tests use `StaTestRunner.cs` to run on an STA thread — required for any WPF-touching test.
 
 Setup/installer projects (`RFiDGearBundleSetup`, `RFiDGearSetup_x64/x86`) use WiX and are built separately; they are not part of `dotnet build`.
@@ -85,6 +99,54 @@ Serilog with rolling file sink; logs written to `%LocalAppData%\RFiDGear\log\`, 
 ### Extension/Plugin System
 
 MEF enables extensions. `RFiDGear.Extensions.DesfirePluginSample` is the reference plugin project. Extensions export ViewModels and task implementations using the same `[ExportViewModel]` / MEF attributes as the host.
+
+The extension contract is split in two assemblies. An extension references
+only these, never `RFiDGear.exe`:
+
+- `RFiDGear.Contracts` is the host service API (`IRFiDGearExtensionHost` and
+  the project, execution, reader and culture services). It has no MEF
+  dependency.
+- `RFiDGear.ExtensionSdk` is the MEF-facing ABI: `[UiExtension]`,
+  `HostPlacement`, `IUIExtension`, `IUIExtensionDetails`. It is versioned on
+  its own (see its README). `RFiDGear.exe` forwards the old locations of
+  these types so already-built extensions keep working.
+
+Both public surfaces are frozen by approved snapshots under
+`RFiDGear.Tests/ApiSurface/`; a change fails the test and is accepted by
+regenerating the snapshot (`RFIDGEAR_UPDATE_API_SNAPSHOT=1`). Extensions are
+discovered once at start-up from `%ProgramData%\RFiDGear\Extensions`, so
+adding one needs an app restart.
+
+An application extension (`HostPlacement.Application`) implements
+`IApplicationUIExtension` from the SDK. RFiDGear creates the exported class on
+the first click on its Extensions menu entry, never at start-up, and calls
+`CreateContent(IRFiDGearExtensionHost host)` every time it is opened; the
+service arrives as that argument because it does not exist yet when MEF
+composes. It is deliberately not a MEF export. `ApplicationExtensionLauncher`
+disposes the content when the window closes. An extension that sets `Uri`
+still opens that page in a frame as before, without creating its class.
+`RFiDGear.Extensions.CardCheckAssistant` is the first one and the reference
+for the pattern (see its README).
+
+A broken extension never stops the others or the application. `MefHelper`
+probes each DLL (parts, export metadata, imports) before adding it to the
+container, logs a failure with Serilog and skips that file. If the extensions
+that passed still break the export queries, it rebuilds the container from the
+host alone. `MefHelper.LastLoadResults` records the outcome per file.
+
+An extension that needs more than the contract (services, a database driver,
+a PDF engine) keeps that code in a support library named
+`RFiDGear.ExtensionLibraries.<Name>`; the first is
+`RFiDGear.ExtensionLibraries.CardCheck`. **The name must never start with
+`RFiDGear.Extensions`, in any letter case.** `MefHelper` scans the extensions
+folder for `RFiDGear.Extensions*.dll` and hands every match to MEF, so a library
+called `RFiDGear.ExtensionsNative.*` or `RFiDGear.ExtensionSupport.*` would be
+loaded as an extension at every start-up. A support library is plain `net8.0`
+(no WPF), references no other RFiDGear project, compiles against host-owned
+packages (Serilog, GemBox.Pdf) without shipping a copy of them, and sits flat
+next to the extension that uses it: .NET finds it there, the host needs no
+change for that. `CardCheckCoreBoundaryTests` pin the rules, including the
+name, against the host's own scan.
 
 ### UI Structure
 

@@ -122,7 +122,7 @@ namespace RFiDGear.Tests
         }
 
         [Theory]
-        [InlineData(TaskType_MifareDesfireTask.ApplicationKeyChangeover, true, false)]
+        [InlineData(TaskType_MifareDesfireTask.ApplicationKeyChangeover, true, true)]
         [InlineData(TaskType_MifareDesfireTask.ApplicationKeySettingsChangeover, false, true)]
         [InlineData(TaskType_MifareDesfireTask.ChangeDefault, false, false)]
         [InlineData(TaskType_MifareDesfireTask.ReadAppSettings, false, false)]
@@ -166,7 +166,7 @@ namespace RFiDGear.Tests
         }
 
         [Theory]
-        [InlineData(TaskType_MifareDesfireTask.PICCMasterKeyChangeover, true, false)]
+        [InlineData(TaskType_MifareDesfireTask.PICCMasterKeyChangeover, true, true)]
         [InlineData(TaskType_MifareDesfireTask.PICCMasterKeySettingsChangeover, false, true)]
         [InlineData(TaskType_MifareDesfireTask.ChangeDefault, false, false)]
         [InlineData(TaskType_MifareDesfireTask.ReadAppSettings, false, false)]
@@ -185,6 +185,36 @@ namespace RFiDGear.Tests
 
                 Assert.Equal(showTarget, viewModel.ShowPiccMasterKeyTargetInputs);
                 Assert.Equal(showSettings, viewModel.ShowPiccMasterKeySettingsInputs);
+            });
+        }
+
+        [Theory]
+        [InlineData(TaskType_MifareDesfireTask.ApplicationKeyChangeover, false)]
+        [InlineData(TaskType_MifareDesfireTask.ApplicationKeySettingsChangeover, true)]
+        [InlineData(TaskType_MifareDesfireTask.PICCMasterKeyChangeover, false)]
+        public async Task SelectedTaskType_ShowsApplicationSettingsActionOnlyForSettingsChange(
+            TaskType_MifareDesfireTask taskType,
+            bool expected)
+        {
+            await RunOnStaThreadAsync(() =>
+            {
+                var viewModel = new MifareDesfireSetupViewModel { SelectedTaskType = taskType };
+                Assert.Equal(expected, viewModel.ShowAppKeySettingsEditButton);
+            });
+        }
+
+        [Theory]
+        [InlineData(TaskType_MifareDesfireTask.PICCMasterKeyChangeover, false)]
+        [InlineData(TaskType_MifareDesfireTask.PICCMasterKeySettingsChangeover, true)]
+        [InlineData(TaskType_MifareDesfireTask.ApplicationKeyChangeover, false)]
+        public async Task SelectedTaskType_ShowsPiccSettingsActionOnlyForSettingsChange(
+            TaskType_MifareDesfireTask taskType,
+            bool expected)
+        {
+            await RunOnStaThreadAsync(() =>
+            {
+                var viewModel = new MifareDesfireSetupViewModel { SelectedTaskType = taskType };
+                Assert.Equal(expected, viewModel.ShowPiccMasterKeySettingsEditButton);
             });
         }
 
@@ -483,7 +513,9 @@ namespace RFiDGear.Tests
                     keyNumberForChange: 0,
                     authKeyHex: "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF",
                     oldKeyForTargetSlot: "00000000000000000000000000000000",
-                    keySettings: DESFireKeySettings.ChangeKeyWithMasterKey);
+                    currentKeySettings: DESFireKeySettings.ChangeKeyWithTargetedKeyNumber |
+                                        DESFireKeySettings.AllowChangeMasterKey |
+                                        DESFireKeySettings.ConfigurationChangeable);
 
                 Assert.Equal((uint)1, payload.AppId);
                 Assert.Equal((byte)0, payload.TargetKeyNo);
@@ -493,7 +525,11 @@ namespace RFiDGear.Tests
                 Assert.Equal((byte)0x01, payload.NewTargetKeyVersion);
                 Assert.Equal("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF", payload.MasterKeyHex);
                 Assert.Equal(DESFireKeyType.DF_KEY_DES, payload.MasterKeyType);
-                Assert.Equal(DESFireKeySettings.ChangeKeyWithMasterKey, payload.KeySettings);
+                Assert.Equal(
+                    DESFireKeySettings.ChangeKeyWithTargetedKeyNumber |
+                    DESFireKeySettings.AllowChangeMasterKey |
+                    DESFireKeySettings.ConfigurationChangeable,
+                    payload.CurrentKeySettings);
             });
         }
 
@@ -517,14 +553,129 @@ namespace RFiDGear.Tests
             });
         }
 
-        [Fact]
-        public async Task GetPiccMasterKeyChangeSettings_UsesMinimalChangeKeyWithMasterKey()
+        [Theory]
+        [InlineData("0xF482D0", 0xF482D0)]
+        [InlineData("16024272", 0xF482D0)]
+        public async Task AppNumberTarget_AcceptsHexAndDecimalApplicationIds(string value, int expected)
         {
             await RunOnStaThreadAsync(() =>
             {
-                var settings = MifareDesfireSetupViewModel.GetPiccMasterKeyChangeSettings();
+                var viewModel = new MifareDesfireSetupViewModel { AppNumberTarget = value };
 
-                Assert.Equal(DESFireKeySettings.ChangeKeyWithMasterKey, settings);
+                Assert.True(viewModel.IsValidAppNumberTarget);
+                Assert.Equal(expected, viewModel.AppNumberTargetAsInt);
+            });
+        }
+
+        [Theory]
+        [InlineData(ERROR.NoError, true)]
+        [InlineData(ERROR.AuthFailure, false)]
+        public async Task ChangeAppKeyCommand_RequiresAuthenticationWithNewKey(
+            ERROR postChangeAuthenticationResult,
+            bool expectedSuccess)
+        {
+            await RunOnStaThreadAsync(async () =>
+            {
+                var fakeProvider = new FakeElatecNetProvider
+                {
+                    PostChangeAuthenticationResult = postChangeAuthenticationResult
+                };
+                var originalInstance = GetReaderDeviceInstance();
+                var originalReader = ReaderDevice.Reader;
+                try
+                {
+                    ReaderDevice.Reader = ReaderTypes.Elatec;
+                    SetReaderDeviceInstance(fakeProvider);
+                    var viewModel = new MifareDesfireSetupViewModel
+                    {
+                        SelectedTaskType = TaskType_MifareDesfireTask.ApplicationKeyChangeover,
+                        AppNumberCurrent = "1",
+                        AppNumberTarget = "1",
+                        SelectedDesfireAppKeySettingsCreateNewApp = AccessCondition_MifareDesfireAppCreation.ChangeKeyUsingMK,
+                        SelectedDesfireAppKeyEncryptionTypeCurrent = DESFireKeyType.DF_KEY_AES,
+                        SelectedDesfireAppKeyEncryptionTypeTarget = DESFireKeyType.DF_KEY_AES,
+                        SelectedDesfireAppKeyNumberCurrent = "0",
+                        DesfireAppKeyCurrent = "00000000000000000000000000000000",
+                        DesfireAppKeyTarget = "11111111111111111111111111111111",
+                        SelectedDesfireAppKeyVersionTarget = "01"
+                    };
+
+                    await viewModel.ChangeAppKeyCommand.ExecuteAsync(null);
+
+                    Assert.Equal(1, fakeProvider.ChangeKeyCalls);
+                    Assert.Equal(2, fakeProvider.AuthCalls);
+                    Assert.Equal("11111111111111111111111111111111", fakeProvider.LastAuthKey);
+                    Assert.Equal(DESFireKeyType.DF_KEY_AES, fakeProvider.LastAuthKeyType);
+                    Assert.Equal(0, fakeProvider.LastAuthKeyNumber);
+                    Assert.Equal(expectedSuccess ? ERROR.NoError : postChangeAuthenticationResult, viewModel.CurrentTaskErrorLevel);
+                    Assert.Contains(expectedSuccess ? "Verified changed key" : "Unable to verify changed key", viewModel.StatusText);
+                }
+                finally
+                {
+                    SetReaderDeviceInstance(originalInstance);
+                    ReaderDevice.Reader = originalReader;
+                }
+            });
+        }
+
+        [Fact]
+        public async Task ChangeAppKeyCommand_WhenCommandReportsAuthFailureButNewKeyAuthenticates_Succeeds()
+        {
+            await RunOnStaThreadAsync(async () =>
+            {
+                var fakeProvider = new FakeElatecNetProvider
+                {
+                    ChangeKeyResult = ERROR.AuthFailure,
+                    PostChangeAuthenticationResult = ERROR.NoError
+                };
+                var originalInstance = GetReaderDeviceInstance();
+                var originalReader = ReaderDevice.Reader;
+                try
+                {
+                    ReaderDevice.Reader = ReaderTypes.Elatec;
+                    SetReaderDeviceInstance(fakeProvider);
+                    var viewModel = new MifareDesfireSetupViewModel
+                    {
+                        SelectedTaskType = TaskType_MifareDesfireTask.ApplicationKeyChangeover,
+                        AppNumberCurrent = "0xF482D0",
+                        AppNumberTarget = "0xF482D0",
+                        SelectedDesfireAppKeySettingsCreateNewApp = AccessCondition_MifareDesfireAppCreation.ChangeKeyUsingMK,
+                        SelectedDesfireAppKeyEncryptionTypeCurrent = DESFireKeyType.DF_KEY_AES,
+                        SelectedDesfireAppKeyEncryptionTypeTarget = DESFireKeyType.DF_KEY_AES,
+                        SelectedDesfireAppKeyNumberCurrent = "1",
+                        DesfireAppKeyCurrent = "00000000000000000000000000000000",
+                        DesfireAppKeyCurrentOld = "00000000000000000000000000000000",
+                        DesfireAppKeyTarget = "11111111111111111111111111111111",
+                        SelectedDesfireAppKeyVersionTarget = "01"
+                    };
+
+                    await viewModel.ChangeAppKeyCommand.ExecuteAsync(null);
+
+                    Assert.Equal(1, fakeProvider.ChangeKeyCalls);
+                    Assert.Equal(2, fakeProvider.AuthCalls);
+                    Assert.Equal(ERROR.NoError, viewModel.CurrentTaskErrorLevel);
+                    Assert.Contains("Verified changed key", viewModel.StatusText);
+                }
+                finally
+                {
+                    SetReaderDeviceInstance(originalInstance);
+                    ReaderDevice.Reader = originalReader;
+                }
+            });
+        }
+
+        [Theory]
+        [InlineData(DESFireKeySettings.ChangeKeyWithMasterKey, false)]
+        [InlineData(DESFireKeySettings.ChangeKeyWithTargetedKeyNumber, false)]
+        [InlineData(DESFireKeySettings.ChangeKeyFrozen, true)]
+        [InlineData(DESFireKeySettings.ChangeKeyFrozen | DESFireKeySettings.ConfigurationChangeable, true)]
+        public async Task IsChangeKeyFrozen_RecognizesFrozenPolicy(
+            DESFireKeySettings currentKeySettings,
+            bool expected)
+        {
+            await RunOnStaThreadAsync(() =>
+            {
+                Assert.Equal(expected, MifareDesfireSetupViewModel.IsChangeKeyFrozen(currentKeySettings));
             });
         }
         [Theory]
@@ -899,6 +1050,45 @@ namespace RFiDGear.Tests
             });
         }
 
+        [Fact]
+        public async Task DeleteApplicationCommand_WhenAuthMethodIsApplicationKey_UsesAppMasterKey()
+        {
+            await RunOnStaThreadAsync(async () =>
+            {
+                var fakeProvider = new FakeElatecNetProvider();
+                var viewModel = new MifareDesfireSetupViewModel
+                {
+                    AppNumberNew = "1",
+                    DesfireMasterKeyCurrent = "11 11 11 11 11 11 11 11 11 11 11 11 11 11 11 11",
+                    SelectedDesfireMasterKeyEncryptionTypeCurrent = DESFireKeyType.DF_KEY_3K3DES,
+                    DesfireAppKeyCurrent = "22 22 22 22 22 22 22 22 22 22 22 22 22 22 22 22",
+                    SelectedDesfireAppKeyEncryptionTypeCurrent = DESFireKeyType.DF_KEY_AES,
+                    SelectedDesfireDeleteAuthMethod = DesfireDeleteAuthMethod.ApplicationMasterKey0
+                };
+
+                var originalReader = ReaderDevice.Reader;
+                var originalInstance = GetReaderDeviceInstance();
+                try
+                {
+                    ReaderDevice.Reader = ReaderTypes.Elatec;
+                    SetReaderDeviceInstance(fakeProvider);
+
+                    await viewModel.DeleteSignleCardApplicationCommand.ExecuteAsync(null);
+
+                    Assert.Null(fakeProvider.LastAuthKey);
+                    Assert.Equal(viewModel.DesfireAppKeyCurrent, fakeProvider.LastDeleteApplicationKey);
+                    Assert.Equal(DESFireKeyType.DF_KEY_AES, fakeProvider.LastDeleteApplicationKeyType);
+                    Assert.Equal((uint)1, fakeProvider.LastDeletedApplicationId);
+                    Assert.Equal(1, fakeProvider.DeleteApplicationCalls);
+                }
+                finally
+                {
+                    ReaderDevice.Reader = originalReader;
+                    SetReaderDeviceInstance(originalInstance);
+                }
+            });
+        }
+
         private static ReaderDevice GetReaderDeviceInstance()
         {
             return typeof(ReaderDevice).GetField("instance", BindingFlags.NonPublic | BindingFlags.Static)?.GetValue(null) as ReaderDevice;
@@ -911,6 +1101,10 @@ namespace RFiDGear.Tests
 
         private sealed class FakeElatecNetProvider : ElatecNetProvider
         {
+            public ERROR PostChangeAuthenticationResult { get; set; } = ERROR.NoError;
+            public ERROR ChangeKeyResult { get; set; } = ERROR.NoError;
+            public int AuthCalls { get; private set; }
+            public int ChangeKeyCalls { get; private set; }
             public string LastAuthKey { get; private set; }
             public DESFireKeyType LastAuthKeyType { get; private set; }
             public int LastAuthKeyNumber { get; private set; }
@@ -928,6 +1122,10 @@ namespace RFiDGear.Tests
             public DesfireFileAuthMethod LastCreateFileAuthMethod { get; private set; }
             public string LastCreateApplicationKey { get; private set; }
             public int CreateApplicationCalls { get; private set; }
+            public string LastDeleteApplicationKey { get; private set; }
+            public DESFireKeyType LastDeleteApplicationKeyType { get; private set; }
+            public uint LastDeletedApplicationId { get; private set; }
+            public int DeleteApplicationCalls { get; private set; }
 
             public override Task<ERROR> GetMiFareDESFireChipAppIDs(string _appMasterKey = "00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00", DESFireKeyType _keyTypeAppMasterKey = DESFireKeyType.DF_KEY_DES)
                 => Task.FromResult(ERROR.NoError);
@@ -945,7 +1143,38 @@ namespace RFiDGear.Tests
                 LastAuthKey = _applicationMasterKey;
                 LastAuthKeyType = _keyType;
                 LastAuthKeyNumber = _keyNumber;
-                return Task.FromResult(ERROR.NoError);
+                return Task.FromResult(ChangeKeyCalls > 0 ? PostChangeAuthenticationResult : ERROR.NoError);
+            }
+
+            public override Task<ERROR> VerifyMifareDesfireKeyChange(
+                string applicationKey,
+                DESFireKeyType keyType,
+                int keyNumber,
+                int appId = 0) =>
+                AuthToMifareDesfireApplication(applicationKey, keyType, keyNumber, appId);
+
+            public override Task<ERROR> ChangeMifareDesfireKeyAsync(
+                uint appId,
+                byte targetKeyNo,
+                DESFireKeyType targetKeyType,
+                string currentTargetKeyHex,
+                string newTargetKeyHex,
+                byte newTargetKeyVersion,
+                string masterKeyHex,
+                DESFireKeyType masterKeyType,
+                DESFireKeySettings currentKeySettings)
+            {
+                _ = appId;
+                _ = targetKeyNo;
+                _ = targetKeyType;
+                _ = currentTargetKeyHex;
+                _ = newTargetKeyHex;
+                _ = newTargetKeyVersion;
+                _ = masterKeyHex;
+                _ = masterKeyType;
+                _ = currentKeySettings;
+                ChangeKeyCalls++;
+                return Task.FromResult(ChangeKeyResult);
             }
 
             public override Task<ERROR> ReadMiFareDESFireChipFile(string _appReadKey, DESFireKeyType _keyTypeAppReadKey, int _readKeyNo,
@@ -1009,12 +1238,24 @@ namespace RFiDGear.Tests
                     operation: nameof(CreateMifareDesfireApplication),
                     wasAuthenticated: authenticateToPICCFirst));
             }
+
+            public override Task<ERROR> DeleteMifareDesfireApplication(string applicationMasterKey,
+                DESFireKeyType keyType, uint appID, DesfireDeleteAuthMethod authMethod = DesfireDeleteAuthMethod.PiccMasterKey)
+            {
+                LastDeleteApplicationKey = applicationMasterKey;
+                LastDeleteApplicationKeyType = keyType;
+                LastDeletedApplicationId = appID;
+                DeleteApplicationCalls++;
+                return Task.FromResult(ERROR.NoError);
+            }
         }
 
         [Theory]
         [InlineData(0, DESFireKeySettings.ChangeKeyWithMasterKey, 5, 0)]
         [InlineData(1, DESFireKeySettings.ChangeKeyWithMasterKey, 5, 0)]
         [InlineData(1, DESFireKeySettings.ChangeKeyWithTargetedKeyNumber, 5, 5)]
+        [InlineData(1, DESFireKeySettings.ChangeKeyWithTargetedKeyNumber | DESFireKeySettings.ConfigurationChangeable, 5, 5)]
+        [InlineData(1, DESFireKeySettings.ChangeKeyFrozen, 5, 0)]
         public async Task GetAuthKeyNumberForChangeAppKey_MatchesPolicy(
             int appId,
             DESFireKeySettings changeKeyMode,

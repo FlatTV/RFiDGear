@@ -29,6 +29,8 @@ namespace RFiDGear.Infrastructure.ReaderProviders
         private bool _disposed;
         private readonly SemaphoreSlim _comPortLock = new SemaphoreSlim(1, 1);
 
+        private bool IsMultiTechReader => ReaderUnitVersion?.Contains("CCF") == true;
+
         #region Constructor
 
         private async Task Initialize()
@@ -107,7 +109,32 @@ namespace RFiDGear.Infrastructure.ReaderProviders
                     {
                         if ((MifareChipSubType)((byte)(tmpTag as MifareChip).SubType & 0xF0) == MifareChipSubType.MifareClassic)
                         {
-                            hfTag = new MifareClassicChipModel(tmpTag.UIDHexString, (CARD_TYPE)((short)(tmpTag as MifareChip).SubType << 8));
+                            var subType = (tmpTag as MifareChip).SubType;
+
+                            if (subType == MifareChipSubType.SmartMX_Mifare_1K ||
+                                subType == MifareChipSubType.SmartMX_Mifare_2K ||
+                                subType == MifareChipSubType.SmartMX_Mifare_4K)
+                            {
+                                var versionL4 = await TryDetectSmartMXDesFireEmulationAsync((tmpTag as MifareChip).UID);
+
+                                if (versionL4 != null)
+                                {
+                                    hfTag = new MifareDesfireChipModel(
+                                        tmpTag.UIDHexString,
+                                        MapSmartMXVersionToCardType(versionL4),
+                                        ByteArrayConverter.GetStringFrom((tmpTag as MifareChip).SAK),
+                                        ByteArrayConverter.GetStringFrom((tmpTag as MifareChip).ATS),
+                                        ByteArrayConverter.GetStringFrom(versionL4));
+                                }
+                                else
+                                {
+                                    hfTag = new MifareClassicChipModel(tmpTag.UIDHexString, (CARD_TYPE)((short)subType << 8));
+                                }
+                            }
+                            else
+                            {
+                                hfTag = new MifareClassicChipModel(tmpTag.UIDHexString, (CARD_TYPE)((short)(tmpTag as MifareChip).SubType << 8));
+                            }
                         }
                         else if ((MifareChipSubType)((byte)(tmpTag as MifareChip).SubType & 0x40) == MifareChipSubType.DESFire)
                         {
@@ -922,7 +949,7 @@ namespace RFiDGear.Infrastructure.ReaderProviders
             byte newTargetKeyVersion,
             string masterKeyHex,
             DESFireKeyType masterKeyType,
-            AccessControl.DESFireKeySettings keySettings)
+            AccessControl.DESFireKeySettings currentKeySettings)
         {
             await _comPortLock.WaitAsync();
             try
@@ -944,7 +971,7 @@ namespace RFiDGear.Infrastructure.ReaderProviders
                     newTargetKeyVersion,
                     masterKeyHex,
                     masterKeyType,
-                    keySettings);
+                    currentKeySettings);
 
                 // Scope selection: appId==0 selects PICC; appId>0 selects that application.
                 await readerDevice.MifareDesfire_SelectApplicationAsync(resolved.AppId);
@@ -982,11 +1009,14 @@ namespace RFiDGear.Infrastructure.ReaderProviders
                         : (MaxNumberOfAppKeys > 0 ? MaxNumberOfAppKeys : (byte)15);
                 }
 
+                // The ELATEC SDK requires the current settings, key count and key type as builder
+                // context for ChangeKey. This value describes the existing card policy; this
+                // operation does not issue ChangeKeySettings or modify that policy.
                 await readerDevice.MifareDesfire_ChangeKeyAsync(
                     resolved.OldTargetKeyHex,
                     resolved.NewTargetKeyHex,
                     resolved.NewTargetKeyVersion,
-                    resolved.KeySettingsByteOnWire,
+                    resolved.CurrentKeySettingsContext,
                     resolved.TargetKeyNo,
                     (uint)keyCount,
                     ToElatecKeyType(keyTypeForContext));
@@ -1216,7 +1246,7 @@ namespace RFiDGear.Infrastructure.ReaderProviders
         }
 
         /// <inheritdoc />
-        public async override Task<ERROR> DeleteMifareDesfireApplication(string _applicationMasterKey, DESFireKeyType _keyTypePiccMasterKey, uint _appID, DesfireDeleteAuthMethod _authMethod = DesfireDeleteAuthMethod.PiccMasterKey)
+        public async override Task<ERROR> DeleteMifareDesfireApplication(string _applicationMasterKey, DESFireKeyType _keyType, uint _appID, DesfireDeleteAuthMethod _authMethod = DesfireDeleteAuthMethod.PiccMasterKey)
         {
             await _comPortLock.WaitAsync();
             try
@@ -1233,27 +1263,73 @@ namespace RFiDGear.Infrastructure.ReaderProviders
                     return ERROR.TransportError;
                 }
 
+                // For PICC-level auth: select AID=0 (appId=0).
+                // For app-level auth: select the target AID so the card accepts deletion with the app master key.
+                var authAppId = _authMethod == DesfireDeleteAuthMethod.ApplicationMasterKey0 ? (int)_appID : 0;
+
+                var authResult = await AuthToMifareDesfireApplicationCore(_applicationMasterKey, _keyType, 0, authAppId);
+                if (authResult != ERROR.NoError)
+                    return authResult;
+
                 try
                 {
-                    // For PICC-level auth: select AID=0 (appId=0).
-                    // For app-level auth: select the target AID so the card accepts deletion with the app master key.
-                    var authAppId = _authMethod == DesfireDeleteAuthMethod.ApplicationMasterKey0 ? (int)_appID : 0;
-
-                    if (await AuthToMifareDesfireApplicationCore(_applicationMasterKey, _keyTypePiccMasterKey, 0, authAppId) != ERROR.NoError)
-                        return ERROR.AuthFailure;
-
                     await readerDevice.MifareDesfire_DeleteApplicationAsync(_appID);
                     return ERROR.NoError;
                 }
                 catch
                 {
-                    return ERROR.AuthFailure;
+                    // Some ELATEC firmware/SDK combinations throw after the card has already
+                    // completed the delete. Only accept that ambiguous outcome after a fresh,
+                    // unauthenticated PICC inventory proves the exact target AID is absent.
+                    return await VerifyApplicationAbsentAfterDeleteAsync(_appID)
+                        ? ERROR.NoError
+                        : ERROR.AuthFailure;
                 }
             }
             finally
             {
                 _comPortLock.Release();
             }
+        }
+
+        private async Task<bool> VerifyApplicationAbsentAfterDeleteAsync(uint appId)
+        {
+            Exception lastException = null;
+            const int maxAttempts = 3;
+            for (var attempt = 1; attempt <= maxAttempts; attempt++)
+            {
+                try
+                {
+                    var tag = await readerDevice.SearchTagAsync();
+                    if (tag == null)
+                        throw new InvalidOperationException("SearchTag did not return a tag while verifying DeleteApplication.");
+
+                    await readerDevice.MifareDesfire_SelectApplicationAsync(0);
+                    var applicationIds = await readerDevice.MifareDesfire_GetAppIDsAsync();
+                    if (applicationIds != null && !applicationIds.Contains(appId))
+                    {
+                        Log.ForContext<ElatecNetProvider>().Warning(
+                            "DeleteApplication for AppId {AppId} reported an error, but a fresh PICC inventory proves the target application is absent; accepting the verified final state.",
+                            appId);
+                        return true;
+                    }
+
+                    return false;
+                }
+                catch (Exception exception)
+                {
+                    lastException = exception;
+                    if (attempt < maxAttempts)
+                        await Task.Delay(100);
+                }
+            }
+
+            if (lastException != null)
+            {
+                Log.ForContext<ElatecNetProvider>().Warning(lastException,
+                    "Unable to verify final PICC inventory after DeleteApplication for AppId {AppId}.", appId);
+            }
+            return false;
         }
 
         /// <inheritdoc />
@@ -1709,6 +1785,90 @@ namespace RFiDGear.Infrastructure.ReaderProviders
             {
                 _comPortLock.Release();
             }
+        }
+
+        #endregion
+
+        #region SmartMX Detection
+
+        /// <summary>
+        /// Attempts an ISO 14443-4 VersionL4 activation to detect SmartMX DESFire emulation.
+        /// </summary>
+        /// <remarks>
+        /// On MultiTech (CCF) readers the card must be re-selected via SearchMultiTag and SelectTag
+        /// before the L4 exchange succeeds. On Legic (CCB) readers the SearchTag context is
+        /// sufficient. Returns null when the card does not respond as a DESFire emulation or when
+        /// communication fails (non-fatal; caller falls back to Classic classification).
+        /// </remarks>
+        private async Task<byte[]?> TryDetectSmartMXDesFireEmulationAsync(byte[] uidBytes)
+        {
+            try
+            {
+                if (IsMultiTechReader)
+                {
+                    var uids = await readerDevice.ISO14443A_SearchMultiTagAsync();
+                    if (uids == null || uids.Count == 0)
+                        return null;
+
+                    var target = uids.FirstOrDefault(u =>
+                        u.Length == uidBytes.Length && u.SequenceEqual(uidBytes)) ?? uids[0];
+
+                    if (!await readerDevice.ISO14443A_SelectTagAsync(target))
+                        return null;
+                }
+
+                var version = await readerDevice.ISO14443_4_TdxAsync(new byte[] { 0x60 });
+
+                // Response: [0]=AF (more frames), [1]=04 (NXP vendor), [2]=type (0x01=native, 0x81=emulated)
+                if (version == null || version.Length < 7 || version[2] != 0x81)
+                    return null;
+
+                return version;
+            }
+            catch (Exception e)
+            {
+                Log.ForContext<ElatecNetProvider>().Debug(e, "SmartMX DESFire emulation probe failed (non-fatal).");
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Maps a raw VersionL4 GetVersion response (0x60 command) to the matching SmartMX DESFire CARD_TYPE.
+        /// </summary>
+        /// <remarks>
+        /// Mirrors the EV-generation and storage-size decoding in the Elatec SDK DetectMifareSubType.
+        /// version[4] low nibble = EV generation (0=EV0, 1=EV1, 2=EV2, 3=EV3).
+        /// version[6] = storage size byte (0x10=256B, 0x16=2K, 0x18=4K, 0x1A=8K, 0x1C=16K, 0x1E=32K).
+        /// </remarks>
+        private static CARD_TYPE MapSmartMXVersionToCardType(byte[] version)
+        {
+            int evGen = version[4] & 0x0F;
+            byte sizeByte = version[6];
+
+            return (evGen, sizeByte) switch
+            {
+                (0, 0x10) => CARD_TYPE.SmartMX_DESFireEV0_256,
+                (0, _)    => CARD_TYPE.SmartMX_DESFireEV0_4K,
+
+                (1, 0x10) => CARD_TYPE.SmartMX_DESFireEV1_256,
+                (1, 0x16) => CARD_TYPE.SmartMX_DESFireEV1_2K,
+                (1, 0x18) => CARD_TYPE.SmartMX_DESFireEV1_4K,
+                (1, _)    => CARD_TYPE.SmartMX_DESFireEV1_8K,
+
+                (2, 0x16) => CARD_TYPE.SmartMX_DESFireEV2_2K,
+                (2, 0x18) => CARD_TYPE.SmartMX_DESFireEV2_4K,
+                (2, 0x1A) => CARD_TYPE.SmartMX_DESFireEV2_8K,
+                (2, 0x1C) => CARD_TYPE.SmartMX_DESFireEV2_16K,
+                (2, _)    => CARD_TYPE.SmartMX_DESFireEV2_32K,
+
+                (3, 0x16) => CARD_TYPE.SmartMX_DESFireEV3_2K,
+                (3, 0x18) => CARD_TYPE.SmartMX_DESFireEV3_4K,
+                (3, 0x1A) => CARD_TYPE.SmartMX_DESFireEV3_8K,
+                (3, 0x1C) => CARD_TYPE.SmartMX_DESFireEV3_16K,
+                (3, _)    => CARD_TYPE.SmartMX_DESFireEV3_32K,
+
+                _ => CARD_TYPE.SmartMX_DESFire,
+            };
         }
 
         #endregion

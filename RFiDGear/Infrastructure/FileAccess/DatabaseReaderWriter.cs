@@ -1,6 +1,4 @@
-﻿using CommunityToolkit.Mvvm.Input;
-
-using System;
+﻿using System;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Reflection;
@@ -30,7 +28,6 @@ namespace RFiDGear.Infrastructure.FileAccess
 
         public ObservableCollection<RFiDChipParentLayerViewModel> TreeViewModel;
         public ChipTaskHandlerModel SetupModel;
-        public IAsyncRelayCommand AsyncRelayCommandLoadDB { get; }
 
         #endregion fields
 
@@ -75,19 +72,49 @@ namespace RFiDGear.Infrastructure.FileAccess
         }
 
         /// <summary>
-        ///
+        /// Reads a project file and stores the result in <see cref="SetupModel"/>.
+        /// Prefer <see cref="ReadProjectAsync"/> when the current model must stay untouched on failure.
         /// </summary>
-        /// <returns></returns>
+        /// <param name="_fileName">Path of the <c>.rfPrj</c> archive or <c>.xml</c> project to read.</param>
+        /// <returns>The read result; <see cref="SetupModel"/> is replaced whenever <see cref="DatabaseReadResult.Success"/> is true.</returns>
         public async Task<DatabaseReadResult> ReadDatabase(string _fileName = "")
         {
-            if (string.IsNullOrWhiteSpace(_fileName) || !File.Exists(_fileName))
+            var (result, model) = await ReadProjectAsync(_fileName).ConfigureAwait(false);
+
+            if (result.Success && model != null)
             {
-                return DatabaseReadResult.Failed();
+                SetupModel = model;
             }
 
-            var file = new FileInfo(_fileName);
+            return result;
+        }
 
-            return await Task.Run(() =>
+        /// <summary>
+        /// Reads a project file and returns the deserialized model without changing any state of this
+        /// instance, so a failed read can never damage the project that is currently loaded.
+        /// Archives are extracted below this instance's <see cref="ProjectManager"/> root.
+        /// </summary>
+        /// <param name="fileName">Path of the <c>.rfPrj</c> archive or <c>.xml</c> project to read.</param>
+        /// <returns>
+        /// The read result and, when it succeeded, the deserialized model (otherwise <c>null</c>).
+        /// A file that deserializes to nothing, such as one with a nil root, is reported as
+        /// <see cref="DatabaseReadFailureReason.DeserializationFailed"/>.
+        /// </returns>
+        internal async Task<(DatabaseReadResult Result, ChipTaskHandlerModel Model)> ReadProjectAsync(string fileName = "")
+        {
+            if (string.IsNullOrWhiteSpace(fileName) || !File.Exists(fileName))
+            {
+                return (DatabaseReadResult.Failed(), null);
+            }
+
+            var file = new FileInfo(fileName);
+
+            if (projectManager.GetProjectFileType(file) == ProjectFileType.Unknown)
+            {
+                return (DatabaseReadResult.Failed(DatabaseReadFailureReason.UnsupportedFormat), null);
+            }
+
+            return await Task.Run<(DatabaseReadResult Result, ChipTaskHandlerModel Model)>(() =>
             {
                 try
                 {
@@ -95,52 +122,72 @@ namespace RFiDGear.Infrastructure.FileAccess
 
                     if (!projectLoadResult.Success)
                     {
-                        return DatabaseReadResult.Failed();
+                        return (DatabaseReadResult.Failed(DatabaseReadFailureReason.UnsupportedFormat), null);
                     }
 
                     if (!projectLoadResult.IsSupportedVersion)
                     {
                         LogNewerManifest(projectLoadResult.ManifestVersion);
-
                     }
 
-                    DeserializeProject(projectLoadResult);
+                    var model = DeserializeProject(projectLoadResult);
 
-                    return new DatabaseReadResult(true, projectLoadResult.ManifestVersion, projectLoadResult.IsSupportedVersion);
+                    if (model == null)
+                    {
+                        logger.Error("Project file {DatabaseFile} does not contain a task project", fileName);
+                        return (DatabaseReadResult.Failed(DatabaseReadFailureReason.DeserializationFailed), null);
+                    }
+
+                    var reason = projectLoadResult.IsSupportedVersion
+                        ? DatabaseReadFailureReason.None
+                        : DatabaseReadFailureReason.UnsupportedVersion;
+                    return (new DatabaseReadResult(true, projectLoadResult.ManifestVersion, projectLoadResult.IsSupportedVersion, reason), model);
+                }
+                catch (InvalidDataException e)
+                {
+                    logger.Error(e, "Project archive format is invalid {DatabaseFile}", fileName);
+                    return (DatabaseReadResult.Failed(DatabaseReadFailureReason.UnsupportedFormat), null);
+                }
+                catch (IOException e)
+                {
+                    logger.Error(e, "Failed to access database file {DatabaseFile}", fileName);
+                    return (DatabaseReadResult.Failed(), null);
+                }
+                catch (UnauthorizedAccessException e)
+                {
+                    logger.Error(e, "Access to database file was denied {DatabaseFile}", fileName);
+                    return (DatabaseReadResult.Failed(), null);
                 }
                 catch (Exception e)
                 {
-                    logger.Error(e, "Failed to process database file {DatabaseFile}", _fileName);
-                    return DatabaseReadResult.Failed();
+                    logger.Error(e, "Failed to process database file {DatabaseFile}", fileName);
+                    return (DatabaseReadResult.Failed(DatabaseReadFailureReason.DeserializationFailed), null);
                 }
             }).ConfigureAwait(false);
         }
 
-        private void DeserializeProject(ProjectLoadResult projectLoadResult)
+        /// <summary>
+        /// Deserializes the task project from the prepared reader. Plain XML projects and the
+        /// <c>taskdatabase.xml</c> extracted from an archive share one format, so both use the same code.
+        /// </summary>
+        /// <returns>The model, or <c>null</c> when the document deserializes to nothing.</returns>
+        private ChipTaskHandlerModel DeserializeProject(ProjectLoadResult projectLoadResult)
         {
+            ChipTaskHandlerModel model = null;
+
             using (projectLoadResult.Reader)
             {
-                try
+                // The model contains WPF view models, which must be created on an STA thread.
+                ExecuteOnStaThread(() =>
                 {
-                    if (projectLoadResult.FileType == ProjectFileType.Xml)
-                    {
-                        ExecuteOnStaThread(() => AsyncRelayCommandLoadDB?.Execute(projectLoadResult.Reader));
-                        return;
-                    }
-
-                    ExecuteOnStaThread(() =>
-                    {
-                        var projectXml = ReadProjectXml(projectLoadResult.Reader);
-                        var serializer = new XmlSerializer(typeof(ChipTaskHandlerModel));
-                        using var stringReader = new StringReader(projectXml);
-                        SetupModel = serializer.Deserialize(stringReader) as ChipTaskHandlerModel;
-                    });
-                }
-                catch (Exception e)
-                {
-                    logger.Error(e, "Failed to deserialize project manifest from {ManifestFile}", projectLoadResult?.Reader?.ToString());
-                }
+                    var projectXml = ReadProjectXml(projectLoadResult.Reader);
+                    var serializer = new XmlSerializer(typeof(ChipTaskHandlerModel));
+                    using var stringReader = new StringReader(projectXml);
+                    model = serializer.Deserialize(stringReader) as ChipTaskHandlerModel;
+                });
             }
+
+            return model;
         }
 
         /// <summary>
@@ -173,7 +220,7 @@ namespace RFiDGear.Infrastructure.FileAccess
 
             var dispatcher = Application.Current?.Dispatcher;
 
-            if (dispatcher != null)
+            if (dispatcher != null && !dispatcher.HasShutdownStarted && !dispatcher.HasShutdownFinished)
             {
                 if (dispatcher.CheckAccess())
                 {
@@ -250,7 +297,18 @@ namespace RFiDGear.Infrastructure.FileAccess
             }
         }
 
-        public void WriteDatabase(ChipTaskHandlerModel objModel, string _path = "")
+        /// <summary>
+        /// Writes a task project: plain XML for a <c>.xml</c> path, otherwise a ZIP archive containing
+        /// <c>taskdatabase.xml</c>. A path without an extension gets <c>.rfPrj</c> appended; an empty path
+        /// writes to the application data folder.
+        /// </summary>
+        /// <param name="objModel">The project to write.</param>
+        /// <param name="_path">Target path as chosen by the user or caller.</param>
+        /// <returns>
+        /// The path that was actually written, which differs from <paramref name="_path"/> when an extension
+        /// was appended, or <c>null</c> when the project could not be serialized (the failure is logged).
+        /// </returns>
+        public string WriteDatabase(ChipTaskHandlerModel objModel, string _path = "")
         {
             try
             {
@@ -272,7 +330,7 @@ namespace RFiDGear.Infrastructure.FileAccess
 
                 if (saveAsXml)
                 {
-                    return;
+                    return _path;
                 }
 
                 var archivePath = string.IsNullOrWhiteSpace(_path)
@@ -294,10 +352,12 @@ namespace RFiDGear.Infrastructure.FileAccess
                         CompressionLevel.Optimal);
                 }
 
+                return archivePath;
             }
             catch (XmlException e)
             {
                 logger.Error(e, "Failed to write task database archive");
+                return null;
             }
         }
 
@@ -306,25 +366,71 @@ namespace RFiDGear.Infrastructure.FileAccess
             File.Delete(projectManager.ChipDatabasePath);
         }
 
+        /// <summary>
+        /// Identifies the root cause of a failed <see cref="DatabaseReadResult"/>.
+        /// Used by callers to map internal read failures to user-facing error codes without
+        /// inferring cause from <see cref="DatabaseReadResult.IsSupportedVersion"/>.
+        /// </summary>
+        public enum DatabaseReadFailureReason
+        {
+            /// <summary>No failure; the read completed successfully.</summary>
+            None,
+
+            /// <summary>The project file's manifest version is newer than the application supports.</summary>
+            UnsupportedVersion,
+
+            /// <summary>The file extension or archive structure is not a supported project format.</summary>
+            UnsupportedFormat,
+
+            /// <summary>The project XML could not be deserialized (malformed, schema mismatch, etc.).</summary>
+            DeserializationFailed,
+
+            /// <summary>An I/O or preparation error prevented the file from being read.</summary>
+            IoFailure,
+        }
+
         public class DatabaseReadResult
         {
-            public DatabaseReadResult(bool success, int manifestVersion, bool isSupportedVersion)
+            /// <summary>
+            /// Initializes a new result.
+            /// </summary>
+            /// <param name="success">Whether the read succeeded.</param>
+            /// <param name="manifestVersion">The numeric manifest version extracted from the file.</param>
+            /// <param name="isSupportedVersion">Whether the manifest version is within the supported range.</param>
+            /// <param name="failureReason">Root-cause classification; <see cref="DatabaseReadFailureReason.None"/> on success.</param>
+            public DatabaseReadResult(bool success, int manifestVersion, bool isSupportedVersion,
+                DatabaseReadFailureReason failureReason = DatabaseReadFailureReason.None)
             {
                 Success = success;
                 ManifestVersion = manifestVersion;
                 IsSupportedVersion = isSupportedVersion;
+                FailureReason = failureReason;
             }
 
+            /// <summary>Whether the read completed without error.</summary>
             public bool Success { get; }
 
+            /// <summary>Numeric manifest version extracted from the file, or 0 on failure.</summary>
             public int ManifestVersion { get; }
 
+            /// <summary>
+            /// <c>true</c> when the file's manifest version is within the range this application supports.
+            /// <c>false</c> on a version-mismatch (<see cref="DatabaseReadFailureReason.UnsupportedVersion"/>)
+            /// or when <see cref="Success"/> is <c>false</c>.
+            /// </summary>
             public bool IsSupportedVersion { get; }
 
-            public static DatabaseReadResult Failed()
-            {
-                return new DatabaseReadResult(false, 0, false);
-            }
+            /// <summary>
+            /// Root-cause classification when <see cref="Success"/> is <c>false</c>, or
+            /// <see cref="DatabaseReadFailureReason.UnsupportedVersion"/> when the file loaded but
+            /// its version is not supported. <see cref="DatabaseReadFailureReason.None"/> on success.
+            /// </summary>
+            public DatabaseReadFailureReason FailureReason { get; }
+
+            /// <summary>Creates a failure result with an explicit cause.</summary>
+            /// <param name="reason">Root-cause classification for the failure.</param>
+            public static DatabaseReadResult Failed(DatabaseReadFailureReason reason = DatabaseReadFailureReason.IoFailure)
+                => new DatabaseReadResult(false, 0, false, reason);
         }
     }
 }
