@@ -75,6 +75,7 @@ namespace RFiDGear.Infrastructure.Tasks
         ReadAppSettings,
         CheckAppKeyCount,
         ValidateFile,
-        ChangeDefault
+        ChangeDefault,
+        CheckFileSettings
     }
 }

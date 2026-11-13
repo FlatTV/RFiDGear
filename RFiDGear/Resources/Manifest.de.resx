@@ -919,6 +919,9 @@ Wird benötigt von:
   <data name="buttonContentMifareDesfireFileMasteringChangeFileSettings" xml:space="preserve">
     <value>Dateieinstellungen ändern</value>
   </data>
+  <data name="buttonContentMifareDesfireFileMasteringCheckFileSettings" xml:space="preserve">
+    <value>Dateieinstellungen prüfen</value>
+  </data>
   <data name="buttonContentMifareDesfireFileMasteringDeleteFile" xml:space="preserve">
     <value>Datei löschen</value>
   </data>
@@ -1267,6 +1270,9 @@ Wird benötigt von:
   <data name="ENUM.TaskType_MifareDesfireTask.CheckAppKeyCount" xml:space="preserve">
     <value>Prüfung: App Schlüsselanzahl</value>
   </data>
+  <data name="ENUM.TaskType_MifareDesfireTask.CheckFileSettings" xml:space="preserve">
+    <value>Prüfung: Dateieinstellungen</value>
+  </data>
   <data name="ENUM.ERROR.OutOfMemory" xml:space="preserve">
     <value>Nicht genügend Speicher</value>
   </data>
@@ -1595,6 +1601,12 @@ https://github.com/c3rebro/RFiDGear</value>
   <data name="labelReaderSetupReaderConnectStatus" xml:space="preserve">
     <value>Verbunden:</value>
   </data>
+  <data name="labelReaderSetupReaderNotAccessible" xml:space="preserve">
+    <value>Der Reader konnte nicht geöffnet werden. Sein COM-Port wird möglicherweise von einem anderen Programm oder einem anderen RFiDGear-Fenster verwendet.</value>
+  </data>
+  <data name="labelReaderPortNotAccessible" xml:space="preserve">
+    <value>(Port nicht zugreifbar)</value>
+  </data>
   <data name="menuItemResetTasksReportTargetPath" xml:space="preserve">
     <value>_Berichtausgabepfade zurücksetzen</value>
   </data>
@@ -1903,5 +1915,92 @@ https://github.com/c3rebro/RFiDGear</value>
   </data>
   <data name="labelTargetDesfireKeySettings" xml:space="preserve">
     <value>Neue anzuwendende Schlüsseleinstellungen</value>
+  </data>
+  <data name="labelExpectedDesfireKeySettings" xml:space="preserve">
+    <value>Erwartete Schlüsseleinstellungen (Vergleich mit der Karte)</value>
+  </data>
+  <data name="groupBoxHeaderMifareDesfireExpectedAppSettings" xml:space="preserve">
+    <value>Erwartete Anwendungseinstellungen</value>
+  </data>
+  <data name="labelAppSettingsCompareAll" xml:space="preserve">
+    <value>Alle gewählten Einstellungen müssen gesetzt sein</value>
+  </data>
+  <data name="labelAppSettingsCompareAny" xml:space="preserve">
+    <value>Mindestens eine gewählte Einstellung muss gesetzt sein</value>
+  </data>
+  <data name="labelAppSettingsCompareExact" xml:space="preserve">
+    <value>Exakte Übereinstimmung (einschließlich Key-Änderungsmodus)</value>
+  </data>
+  <data name="textBoxStatusNoKeySettingFlagSelected" xml:space="preserve">
+    <value>Nichts zu vergleichen: Wählen Sie mindestens eine Schlüsseleinstellung oder &quot;Exakte Übereinstimmung&quot;.</value>
+  </data>
+  <data name="labelExpectedChangeKeyPolicy" xml:space="preserve">
+    <value>Key-Änderungsmodus (erwartet)</value>
+  </data>
+  <data name="labelContentMifareDesfireAppId" xml:space="preserve">
+    <value>App-ID</value>
+  </data>
+  <data name="labelContentMifareDesfireMaxKeys" xml:space="preserve">
+    <value>Max. Schlüssel</value>
+  </data>
+  <data name="buttonContentMifareDesfirePerformCompare" xml:space="preserve">
+    <value>Vergleich durchführen</value>
+  </data>
+  <data name="groupBoxHeaderMifareDesfireExpectedKeyCount" xml:space="preserve">
+    <value>Erwartete Schlüsselanzahl</value>
+  </data>
+  <data name="textBoxStatusAppSettingsCompared" xml:space="preserve">
+    <value>{0}: Einstellungen von App {1} gelesen — ist: 0x{2:X2}, soll: 0x{3:X2} ({4}) → {5}</value>
+  </data>
+  <data name="textBoxStatusAppKeyCountCompared" xml:space="preserve">
+    <value>{0}: Schlüsselanzahl von App {1} — ist: {2}, soll: {3} → {4}</value>
+  </data>
+  <data name="textBoxStatusAppSettingsUnreadable" xml:space="preserve">
+    <value>{0}: Einstellungen von App {1} konnten nicht gelesen werden: {2}</value>
+  </data>
+  <data name="textBoxStatusCompareModeAll" xml:space="preserve">
+    <value>alle gewählten</value>
+  </data>
+  <data name="textBoxStatusCompareModeAny" xml:space="preserve">
+    <value>mindestens eine gewählte</value>
+  </data>
+  <data name="textBoxStatusCompareModeExact" xml:space="preserve">
+    <value>exakte Übereinstimmung</value>
+  </data>
+  <data name="textBoxStatusComparePass" xml:space="preserve">
+    <value>BESTANDEN</value>
+  </data>
+  <data name="textBoxStatusCompareFail" xml:space="preserve">
+    <value>NICHT BESTANDEN</value>
+  </data>
+  <data name="textBoxStatusInvalidApplicationId" xml:space="preserve">
+    <value>{0}: Die App-ID ist ungültig; es wurde nichts gelesen.</value>
+  </data>
+  <data name="textBoxStatusFileSettingsUnsupportedFileType" xml:space="preserve">
+    <value>{0}: Nur Standard- und Backup-Datendateien können geprüft werden; Wert- und Record-Dateien werden noch nicht unterstützt. Es wurde nichts gelesen.</value>
+  </data>
+  <data name="textBoxStatusFileSettingsInvalidInput" xml:space="preserve">
+    <value>{0}: App, Datei, Größe oder Schlüssel sind ungültig. Es wurde nichts gelesen.</value>
+  </data>
+  <data name="textBoxStatusFileSettingsCompared" xml:space="preserve">
+    <value>{0}: Einstellungen von Datei {2} in App {1} verglichen → {3}</value>
+  </data>
+  <data name="textBoxStatusFileSettingsUnreadable" xml:space="preserve">
+    <value>{0}: Die Einstellungen von Datei {2} in App {1} konnten nicht vollständig gelesen werden: {3}</value>
+  </data>
+  <data name="labelContentMifareDesfireCommunicationMode" xml:space="preserve">
+    <value>Kommunikationsmodus</value>
+  </data>
+  <data name="labelContentMifareDesfireBytes" xml:space="preserve">
+    <value>Byte(s)</value>
+  </data>
+  <data name="textBoxStatusFileSettingsInvalidKeyNumber" xml:space="preserve">
+    <value>{0}: Die Schlüsselnummer muss zwischen 0 und 13 liegen. Es wurde nichts gelesen.</value>
+  </data>
+  <data name="textBoxStatusFileSettingsUnknownCommunicationMode" xml:space="preserve">
+    <value>{0}: Wählen Sie den Kommunikationsmodus, den die Datei haben soll; &quot;unbekannt&quot; kann nicht geprüft werden. Es wurde nichts gelesen.</value>
+  </data>
+  <data name="textBoxStatusFileSettingsNoReader" xml:space="preserve">
+    <value>{0}: Es ist kein Lesegerät verfügbar. Es wurde nichts gelesen.</value>
   </data>
 </root>
