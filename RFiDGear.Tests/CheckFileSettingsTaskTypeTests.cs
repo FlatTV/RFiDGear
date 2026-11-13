@@ -42,8 +42,10 @@ namespace RFiDGear.Tests
                 ["AuthenticateApplication"] = 14,
                 ["ReadAppSettings"] = 15,
                 ["CheckAppKeyCount"] = 16,
-                ["ChangeDefault"] = 17,
-                ["CheckFileSettings"] = 18,
+                // Fork-only task type ("Check: File and Keys"); it sits before ChangeDefault, so the two after it are shifted.
+                ["ValidateFile"] = 17,
+                ["ChangeDefault"] = 18,
+                ["CheckFileSettings"] = 19,
             };
 
             var actual = Enum.GetValues(typeof(TaskType_MifareDesfireTask))
